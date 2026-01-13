@@ -120,15 +120,8 @@ struct MapView: View {
     
     private var localCityInfo: some View {
         HStack(spacing: 10) {
-            // 定位状态
-            if viewModel.isLocating {
-                ProgressView()
-                    .scaleEffect(0.8)
-                    .tint(.white)
-                Text("定位中...")
-                    .font(.system(size: 14))
-                    .foregroundColor(.gray)
-            } else if let city = viewModel.currentCity {
+            // 城市信息
+            if let city = viewModel.currentCity {
                 Image(systemName: "location.fill")
                     .font(.system(size: 12))
                     .foregroundColor(.blue)
@@ -144,20 +137,23 @@ struct MapView: View {
                         .font(.system(size: 13))
                         .foregroundColor(.gray)
                 }
-            } else {
-                Image(systemName: "location.slash")
-                    .font(.system(size: 12))
-                    .foregroundColor(.orange)
                 
-                Text("无法获取位置")
-                    .font(.system(size: 14))
-                    .foregroundColor(.orange)
-                
-                Button("重试") {
-                    setupLocation()
+                // 城市选择按钮
+                Button {
+                    // TODO: 打开城市选择器
+                    haptic(.light)
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.gray)
                 }
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.blue)
+            } else if viewModel.isLocating {
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .tint(.white)
+                Text("定位中...")
+                    .font(.system(size: 14))
+                    .foregroundColor(.gray)
             }
             
             Spacer()
@@ -434,13 +430,21 @@ class MapViewModel: ObservableObject {
         userCoordinate = coordinate
         isLocating = false
         
-        if let city = city {
+        // 检查是否在中国境内
+        let isInChina = isCoordinateInChina(coordinate)
+        
+        if let city = city, isInChina {
             currentCity = city
+        } else if !isInChina {
+            // 不在中国，使用默认城市
+            currentCity = "北京"
+            userCoordinate = CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074)
         }
         
-        // 如果是同城模式且刚获取到位置，自动切换到用户位置
-        if viewMode == .local && currentCity != nil {
-            animateToUserLocation()
+        // 如果是同城模式，自动加载本地数据
+        if viewMode == .local, let city = currentCity {
+            loadLocalData(for: city)
+            animateToCity(city)
         }
     }
     
@@ -451,6 +455,14 @@ class MapViewModel: ObservableObject {
         if viewMode == .local {
             loadLocalData(for: city)
         }
+    }
+    
+    // 检查坐标是否在中国境内
+    private func isCoordinateInChina(_ coordinate: CLLocationCoordinate2D) -> Bool {
+        // 中国大致经纬度范围
+        let latRange = 18.0...54.0
+        let lonRange = 73.0...135.0
+        return latRange.contains(coordinate.latitude) && lonRange.contains(coordinate.longitude)
     }
     
     // MARK: - View Mode
@@ -467,14 +479,23 @@ class MapViewModel: ObservableObject {
         case .local:
             if let city = currentCity {
                 loadLocalData(for: city)
-                animateToUserLocation()
-            } else if let coordinate = userCoordinate {
-                // 有坐标但没城市名，先定位过去
-                animateTo(coordinate, span: 0.15)
+                animateToCity(city)
             } else {
-                // 没有位置信息，提示用户
-                isLocating = true
+                // 没有城市信息，默认使用北京
+                currentCity = "北京"
+                loadLocalData(for: "北京")
+                animateToCity("北京")
             }
+        }
+    }
+    
+    // 根据城市名定位
+    func animateToCity(_ cityName: String) {
+        // 从配置中查找城市坐标
+        if let cityConfig = MockMapDataProvider.cityConfigs.first(where: { $0.name == cityName }) {
+            animateTo(CLLocationCoordinate2D(latitude: cityConfig.lat, longitude: cityConfig.lon), span: 0.15)
+        } else if let coordinate = userCoordinate {
+            animateTo(coordinate, span: 0.15)
         }
     }
     
@@ -732,7 +753,7 @@ struct ComplaintCardView: View {
                         progress: $playProgress
                     )
                 } else {
-                    Text(complaint.content)
+                    Text(complaint.content ?? "")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white)
                         .lineLimit(2)

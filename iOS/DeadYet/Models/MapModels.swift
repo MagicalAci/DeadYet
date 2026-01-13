@@ -307,8 +307,8 @@ class MockMapDataProvider: MapDataProvider {
 // MARK: - Mock 数据生成
 extension MockMapDataProvider {
     
-    // 城市配置
-    static let cityConfigs: [(name: String, province: String, lat: Double, lon: Double, tier: Int)] = [
+    // 城市配置（公开访问）
+    public static let cityConfigs: [(name: String, province: String, lat: Double, lon: Double, tier: Int)] = [
         // 一线
         ("北京", "北京", 39.9042, 116.4074, 1),
         ("上海", "上海", 31.2304, 121.4737, 1),
