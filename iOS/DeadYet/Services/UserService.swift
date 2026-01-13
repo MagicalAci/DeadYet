@@ -13,7 +13,7 @@ class UserService: ObservableObject {
     @Published var errorMessage: String?
     
     private let userDefaultsKey = "currentUser"
-    private let baseURL = "https://dead-yet-api.zeabur.app" // 后端API地址
+    private let baseURL = "https://deadyet.zeabur.app" // 统一的后端API地址
     
     init() {
         loadUserFromLocal()
