@@ -121,7 +121,7 @@ struct HotSpot: Codable, Identifiable {
 // MARK: - 抱怨数据（通用）
 struct ComplaintData: Codable, Identifiable {
     var id: String = UUID().uuidString
-    var userId: String
+    var userId: String = ""
     var userNickname: String?
     var userEmoji: String = "🐂"
     
@@ -142,8 +142,8 @@ struct ComplaintData: Codable, Identifiable {
     var isAiGenerated: Bool = false
     
     // 位置
-    var latitude: Double
-    var longitude: Double
+    var latitude: Double = 0
+    var longitude: Double = 0
     var city: String?
     var district: String?
     var spotName: String?               // 具体地点名称
@@ -508,12 +508,23 @@ private struct ComplaintsAPIResponse: Decodable {
         let createdAt: String?
         
         func toComplaintData() -> ComplaintData {
+            // 将 API 返回的 category 字符串转换为枚举
+            let complaintCategory: ComplaintData.Category
+            switch category.lowercased() {
+            case "overtime", "加班": complaintCategory = .overtime
+            case "boss", "领导": complaintCategory = .boss
+            case "colleague", "同事": complaintCategory = .colleague
+            case "salary", "工资": complaintCategory = .salary
+            case "meeting", "开会": complaintCategory = .meeting
+            default: complaintCategory = .general
+            }
+            
             var complaint = ComplaintData()
             complaint.id = id
             complaint.content = content
-            complaint.category = category
-            complaint.city = city ?? ""
-            complaint.district = district ?? ""
+            complaint.category = complaintCategory
+            complaint.city = city
+            complaint.district = district
             complaint.userNickname = userNickname ?? "匿名牛马"
             complaint.userEmoji = userEmoji
             complaint.likes = likes
