@@ -26,6 +26,7 @@
 		A1000017 /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000017 /* Colors.xcassets */; };
 		A1000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000019 /* Assets.xcassets */; };
 		A1000020 /* PermissionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000020 /* PermissionsView.swift */; };
+		A1000021 /* MapModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000021 /* MapModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +51,7 @@
 		B1000018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B1000019 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B1000020 /* PermissionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsView.swift; sourceTree = "<group>"; };
+		B1000021 /* MapModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -110,6 +112,7 @@
 			isa = PBXGroup;
 			children = (
 				B1000003 /* User.swift */,
+				B1000021 /* MapModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -282,6 +285,7 @@
 				A1000015 /* VoiceInputButton.swift in Sources */,
 				A1000016 /* LaunchScreenView.swift in Sources */,
 				A1000020 /* PermissionsView.swift in Sources */,
+				A1000021 /* MapModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
