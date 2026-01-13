@@ -19,6 +19,8 @@ import aiRoutes from './routes/ai.js'
 import pushRoutes from './routes/push.js'
 import uploadRoutes from './routes/upload.js'
 import contentRoutes from './routes/content.js'
+import realtimeRoutes from './routes/realtime.js'
+import adminRoutes from './routes/admin.js'
 
 const app = new Hono()
 
@@ -35,7 +37,7 @@ app.use('*', cors({
 app.get('/', (c) => {
   return c.json({
     name: '还没死？API',
-    version: '1.0.0',
+    version: '2.0.0',
     status: '运行中',
     message: '欢迎来到牛马世界 🐂🐴',
     endpoints: {
@@ -44,7 +46,9 @@ app.get('/', (c) => {
       map: '/api/map',
       complaints: '/api/complaints',
       ai: '/api/ai',
-      push: '/api/push'
+      push: '/api/push',
+      realtime: '/api/realtime - 实时数据API',
+      admin: '/api/admin - 管理员API（需要API Key）'
     }
   })
 })
@@ -66,6 +70,8 @@ app.route('/api/ai', aiRoutes)
 app.route('/api/push', pushRoutes)
 app.route('/api/upload', uploadRoutes)
 app.route('/api/content', contentRoutes)
+app.route('/api/realtime', realtimeRoutes)
+app.route('/api/admin', adminRoutes)
 
 // 设计资源上传页面
 app.get('/upload', (c) => {

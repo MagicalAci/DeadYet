@@ -560,31 +560,98 @@ extension MockMapDataProvider {
         }
     }
     
-    // 根据时间计算下班率
+    /// 计算某时间点的"在班率"（正在上班的人占比）
+    /// - Parameters:
+    ///   - hour: 当前小时 (0-23)
+    ///   - minute: 当前分钟 (0-59)
+    ///   - overtimeIndex: 加班指数 (1.0=正常，越高加班越严重)
+    ///   - isWeekend: 是否周末
+    /// - Returns: 在班率 (0-1，1表示100%都在上班)
+    static func calculateWorkingRate(hour: Int, minute: Int = 0, overtimeIndex: Double = 1.0, isWeekend: Bool = false) -> Double {
+        let time = Double(hour) + Double(minute) / 60.0
+        
+        // 周末：只有极少数人加班
+        if isWeekend {
+            let weekendBase = 0.15 * overtimeIndex
+            if time < 10 || time > 20 { return 0.02 }
+            if time >= 10 && time <= 18 { return weekendBase * 0.7 }
+            return weekendBase * 0.3
+        }
+        
+        // 工作日时间段计算
+        var baseRate: Double
+        
+        if time < 8 {
+            // 凌晨-8点：极少数人
+            baseRate = 0.02
+        } else if time < 9 {
+            // 8-9点：陆续上班 (2% → 52%)
+            baseRate = 0.02 + (time - 8) * 0.5
+        } else if time < 9.5 {
+            // 9-9:30：上班高峰 (52% → 95%)
+            baseRate = 0.52 + (time - 9) * 0.86
+        } else if time < 17.5 {
+            // 9:30-17:30：正常工作时间
+            baseRate = 0.95
+        } else if time < 18 {
+            // 17:30-18:00：少数人提前下班 (95% → 90%)
+            baseRate = 0.95 - (time - 17.5) * 0.1
+        } else if time < 19 {
+            // 18-19点：第一波下班潮
+            let progress = time - 18
+            let dropRate = 0.35 / overtimeIndex
+            baseRate = 0.9 - progress * dropRate
+        } else if time < 20 {
+            // 19-20点：第一波加班结束
+            let progress = time - 19
+            let startRate = 0.9 - 0.35 / overtimeIndex
+            let dropRate = 0.25 / overtimeIndex
+            baseRate = startRate - progress * dropRate
+        } else if time < 21 {
+            // 20-21点：常规加班结束
+            let progress = time - 20
+            let startRate = 0.9 - (0.35 + 0.25) / overtimeIndex
+            let dropRate = 0.15 / overtimeIndex
+            baseRate = startRate - progress * dropRate
+        } else if time < 22 {
+            // 21-22点：中度加班结束
+            let progress = time - 21
+            let rate21 = 0.9 - (0.35 + 0.25 + 0.15) / overtimeIndex
+            baseRate = max(0.05, rate21 - progress * 0.1)
+        } else if time < 23 {
+            // 22-23点：重度加班
+            baseRate = max(0.03, 0.15 * overtimeIndex - (time - 22) * 0.05)
+        } else {
+            // 23-24点：极端加班
+            baseRate = max(0.01, 0.1 * overtimeIndex - (time - 23) * 0.05)
+        }
+        
+        // 加班指数调整
+        if time >= 18 && overtimeIndex > 1 {
+            baseRate = baseRate * (1 + (overtimeIndex - 1) * 0.5)
+        }
+        
+        return max(0.01, min(0.98, baseRate))
+    }
+    
+    /// 计算"已下班率"（与 workingRate 互补）
     static func calculateCheckInRate(hour: Int, cityTier: Int) -> Double {
-        // 一线城市下班更晚
-        let tierAdjust: Double
+        // 城市等级对应加班指数
+        let overtimeIndex: Double
         switch cityTier {
-        case 1: tierAdjust = -0.1  // 一线城市下班率更低
-        case 2: tierAdjust = -0.05
-        default: tierAdjust = 0
+        case 1: overtimeIndex = 1.35  // 一线城市加班严重
+        case 2: overtimeIndex = 1.15  // 新一线
+        default: overtimeIndex = 0.95 // 二线相对轻松
         }
         
-        let baseRate: Double
-        switch hour {
-        case 0..<9: baseRate = 0.05
-        case 9..<17: baseRate = 0.1
-        case 17: baseRate = 0.2
-        case 18: baseRate = 0.4
-        case 19: baseRate = 0.55
-        case 20: baseRate = 0.7
-        case 21: baseRate = 0.8
-        case 22: baseRate = 0.88
-        case 23: baseRate = 0.92
-        default: baseRate = 0.95
-        }
+        let minute = Calendar.current.component(.minute, from: Date())
+        let dayOfWeek = Calendar.current.component(.weekday, from: Date())
+        let isWeekend = dayOfWeek == 1 || dayOfWeek == 7
         
-        return max(0.05, min(0.95, baseRate + tierAdjust + Double.random(in: -0.05...0.05)))
+        let workingRate = calculateWorkingRate(hour: hour, minute: minute, overtimeIndex: overtimeIndex, isWeekend: isWeekend)
+        
+        // 已下班率 = 1 - 在班率
+        return 1.0 - workingRate
     }
     
     // 生成抱怨数据
