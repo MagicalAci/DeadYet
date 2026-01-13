@@ -3,7 +3,7 @@
 //  DeadYet - 还没死？
 //
 //  数据仓库层 - 统一数据访问
-//  使用 MapModels.swift 中定义的类型
+//  使用 User.swift 和 MapModels.swift 中定义的类型
 //
 
 import Foundation
@@ -12,8 +12,8 @@ import CoreLocation
 // MARK: - ==================== API 客户端 ====================
 
 @MainActor
-class APIClient2 {
-    static let shared = APIClient2()
+class RepositoryAPIClient {
+    static let shared = RepositoryAPIClient()
     
     private let session: URLSession
     private let baseURL: String
@@ -204,17 +204,17 @@ struct HotSpotDTOResponse: Decodable {
 class UserRepository: ObservableObject {
     static let shared = UserRepository()
     
-    private let api = APIClient2.shared
+    private let api = RepositoryAPIClient.shared
     private let storage = StorageManager.shared
     
-    @Published private(set) var currentUser: UserProfile?
+    @Published private(set) var currentUser: User?
     @Published private(set) var isLoading = false
     
     private init() {
-        currentUser = storage.get(UserProfile.self, forKey: StorageKeys.currentUser)
+        currentUser = storage.get(User.self, forKey: StorageKeys.currentUser)
     }
     
-    func login(email: String) async throws -> UserProfile {
+    func login(email: String) async throws -> User {
         guard isValidEmail(email) else {
             throw AppError.auth(.invalidEmail)
         }
@@ -226,12 +226,10 @@ class UserRepository: ObservableObject {
         if AppConfig.shared.enableMockData {
             try await Task.sleep(nanoseconds: 500_000_000)
             
-            let user = UserProfile(
-                email: email,
-                survivalDays: 1,
-                city: "北京",
-                district: "海淀区"
-            )
+            var user = User(email: email)
+            user.survivalDays = 1
+            user.city = "北京"
+            user.district = "海淀区"
             
             storage.set(user, forKey: StorageKeys.currentUser)
             currentUser = user
@@ -249,18 +247,16 @@ class UserRepository: ObservableObject {
             throw AppError.auth(.invalidCredentials)
         }
         
-        let user = UserProfile(
-            id: dto.id,
-            email: dto.email,
-            nickname: dto.nickname,
-            avatarEmoji: dto.avatarEmoji ?? "🐂",
-            survivalDays: dto.survivalDays ?? 0,
-            totalCheckIns: dto.totalCheckIns ?? 0,
-            currentStreak: dto.currentStreak ?? 0,
-            longestStreak: dto.longestStreak ?? 0,
-            city: dto.city,
-            district: dto.district
-        )
+        var user = User(email: dto.email)
+        user.id = dto.id
+        user.nickname = dto.nickname
+        user.avatarEmoji = dto.avatarEmoji ?? "🐂"
+        user.survivalDays = dto.survivalDays ?? 0
+        user.totalCheckIns = dto.totalCheckIns ?? 0
+        user.currentStreak = dto.currentStreak ?? 0
+        user.longestStreak = dto.longestStreak ?? 0
+        user.city = dto.city
+        user.district = dto.district
         
         if let token = response.token {
             storage.authToken = token
@@ -272,7 +268,7 @@ class UserRepository: ObservableObject {
         return user
     }
     
-    func checkIn(complaint: String?, mood: CheckInRecordData.Mood, city: String?, district: String?) async throws -> CheckInRecordData {
+    func checkIn(complaint: String?, mood: CheckInRecord.Mood, city: String?, district: String?) async throws -> CheckInRecord {
         guard var user = currentUser else {
             throw AppError.auth(.notLoggedIn)
         }
@@ -288,24 +284,15 @@ class UserRepository: ObservableObject {
         if AppConfig.shared.enableMockData {
             try await Task.sleep(nanoseconds: 300_000_000)
             
-            var record = CheckInRecordData(userId: user.id, complaint: complaint, mood: mood)
+            var record = CheckInRecord(userId: user.id, checkInTime: Date(), complaint: complaint, mood: mood)
             record.aiResponse = generateMockAIResponse(for: complaint)
             record.bannerGenerated = true
             
-            user = UserProfile(
-                id: user.id,
-                email: user.email,
-                nickname: user.nickname,
-                avatarEmoji: user.avatarEmoji,
-                survivalDays: user.survivalDays + 1,
-                totalCheckIns: user.totalCheckIns + 1,
-                currentStreak: user.currentStreak + 1,
-                longestStreak: max(user.longestStreak, user.currentStreak + 1),
-                city: user.city,
-                district: user.district,
-                createdAt: user.createdAt,
-                lastCheckIn: Date()
-            )
+            user.survivalDays += 1
+            user.totalCheckIns += 1
+            user.currentStreak += 1
+            user.longestStreak = max(user.longestStreak, user.currentStreak)
+            user.lastCheckIn = Date()
             
             storage.set(user, forKey: StorageKeys.currentUser)
             storage.lastCheckInDate = Date()
@@ -333,30 +320,21 @@ class UserRepository: ObservableObject {
             throw AppError.business(.checkInFailed)
         }
         
-        let record = CheckInRecordData(
-            id: dto.id,
+        var record = CheckInRecord(
             userId: user.id,
             checkInTime: dto.checkInTime.toDate() ?? Date(),
             complaint: dto.complaint,
-            aiResponse: response.aiResponse ?? dto.aiResponse,
-            mood: CheckInRecordData.Mood(rawValue: dto.mood ?? "") ?? .neutral,
-            bannerGenerated: dto.bannerGenerated ?? false
+            mood: CheckInRecord.Mood(rawValue: dto.mood ?? "") ?? .neutral
         )
+        record.id = dto.id
+        record.aiResponse = response.aiResponse ?? dto.aiResponse
+        record.bannerGenerated = dto.bannerGenerated ?? false
         
-        user = UserProfile(
-            id: user.id,
-            email: user.email,
-            nickname: user.nickname,
-            avatarEmoji: user.avatarEmoji,
-            survivalDays: response.survivalDays ?? (user.survivalDays + 1),
-            totalCheckIns: user.totalCheckIns + 1,
-            currentStreak: user.currentStreak + 1,
-            longestStreak: max(user.longestStreak, user.currentStreak + 1),
-            city: user.city,
-            district: user.district,
-            createdAt: user.createdAt,
-            lastCheckIn: Date()
-        )
+        user.survivalDays = response.survivalDays ?? (user.survivalDays + 1)
+        user.totalCheckIns += 1
+        user.currentStreak += 1
+        user.longestStreak = max(user.longestStreak, user.currentStreak)
+        user.lastCheckIn = Date()
         
         storage.set(user, forKey: StorageKeys.currentUser)
         storage.lastCheckInDate = Date()
@@ -400,7 +378,7 @@ class UserRepository: ObservableObject {
 class MapRepository2: ObservableObject {
     static let shared = MapRepository2()
     
-    private let api = APIClient2.shared
+    private let api = RepositoryAPIClient.shared
     private let cache = CacheManager.shared
     
     private init() {}
@@ -522,7 +500,7 @@ class MapRepository2: ObservableObject {
 class ComplaintRepository2: ObservableObject {
     static let shared = ComplaintRepository2()
     
-    private let api = APIClient2.shared
+    private let api = RepositoryAPIClient.shared
     private let cache = CacheManager.shared
     
     private init() {}

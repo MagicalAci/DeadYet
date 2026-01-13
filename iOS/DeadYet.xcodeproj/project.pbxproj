@@ -29,7 +29,6 @@
 		A1000021 /* MapModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000021 /* MapModels.swift */; };
 		A1000022 /* AppCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000022 /* AppCore.swift */; };
 		A1000023 /* Repositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000023 /* Repositories.swift */; };
-		A1000025 /* DomainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000025 /* DomainModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,7 +56,6 @@
 		B1000021 /* MapModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapModels.swift; sourceTree = "<group>"; };
 		B1000022 /* AppCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCore.swift; sourceTree = "<group>"; };
 		B1000023 /* Repositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Repositories.swift; sourceTree = "<group>"; };
-		B1000025 /* DomainModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -120,7 +118,6 @@
 			children = (
 				B1000003 /* User.swift */,
 				B1000021 /* MapModels.swift */,
-				B1000025 /* DomainModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -305,7 +302,6 @@
 				A1000021 /* MapModels.swift in Sources */,
 				A1000022 /* AppCore.swift in Sources */,
 				A1000023 /* Repositories.swift in Sources */,
-				A1000025 /* DomainModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
