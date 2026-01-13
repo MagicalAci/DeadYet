@@ -98,8 +98,8 @@ realtime.get('/city/:name', (c) => {
       return {
         district: district.name,
         type: district.type,
-        latitude: cityConfig.lat + district.latOffset,
-        longitude: cityConfig.lon + district.lonOffset,
+        latitude: district.lat,
+        longitude: district.lon,
         totalWorkers: districtWorkers,
         stillWorking: Math.round(districtWorkers * workingRate),
         checkedIn: Math.round(districtWorkers * (1 - workingRate)),

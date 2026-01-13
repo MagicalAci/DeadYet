@@ -79,7 +79,7 @@ export const complaintService = {
       where: eq(users.id, data.userId)
     })
     
-    const newComplaint: NewComplaint = {
+    const newComplaint: any = {
       userId: data.userId,
       contentType: data.contentType || 'text',
       content: data.content,
@@ -96,7 +96,7 @@ export const complaintService = {
       isAnonymous: true,
     }
     
-    const [complaint] = await db.insert(complaints).values(newComplaint).returning()
+    const [complaint] = await db.insert(complaints).values(newComplaint as any).returning()
     
     return complaint
   },
@@ -120,24 +120,24 @@ export const complaintService = {
     
     // 更新点赞数
     const [updated] = await db.update(complaints)
-      .set({ likesCount: sql`${complaints.likesCount} + 1` })
+      .set({ likesCount: sql`${complaints.likesCount} + 1` } as any)
       .where(eq(complaints.id, complaintId))
       .returning()
     
-    return { success: true, likes: updated.likesCount }
+    return { success: true, likes: updated?.likesCount || 0 }
   },
   
   // 取消点赞
   async unlikeComplaint(userId: string, complaintId: string): Promise<{ success: boolean }> {
-    const result = await db.delete(likes)
+    const result: any = await db.delete(likes)
       .where(and(
         eq(likes.userId, userId),
         eq(likes.complaintId, complaintId)
       ))
     
-    if (result.rowCount && result.rowCount > 0) {
+    if (result?.rowCount && result.rowCount > 0) {
       await db.update(complaints)
-        .set({ likesCount: sql`${complaints.likesCount} - 1` })
+        .set({ likesCount: sql`${complaints.likesCount} - 1` } as any)
         .where(eq(complaints.id, complaintId))
       
       return { success: true }
@@ -183,7 +183,7 @@ export const complaintService = {
       where: eq(users.id, data.userId)
     })
     
-    const newComment: NewComment = {
+    const newComment: any = {
       userId: data.userId,
       complaintId: data.complaintId,
       parentId: data.parentId,
@@ -195,11 +195,11 @@ export const complaintService = {
       userEmoji: user?.avatarEmoji || emojis[Math.floor(Math.random() * emojis.length)],
     }
     
-    const [comment] = await db.insert(comments).values(newComment).returning()
+    const [comment] = await db.insert(comments).values(newComment as any).returning()
     
     // 更新评论数
     await db.update(complaints)
-      .set({ commentsCount: sql`${complaints.commentsCount} + 1` })
+      .set({ commentsCount: sql`${complaints.commentsCount} + 1` } as any)
       .where(eq(complaints.id, data.complaintId))
     
     return comment

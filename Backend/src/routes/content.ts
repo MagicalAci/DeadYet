@@ -118,7 +118,7 @@ content.post('/generate', async (c) => {
   try {
     const { count = 10, type = 'text', city } = await c.req.json()
     
-    const generated: NewComplaint[] = []
+    const generated: any[] = []
     const targetCity = city || cityConfigs[Math.floor(Math.random() * cityConfigs.length)]
     const cityConfig = typeof targetCity === 'string' 
       ? cityConfigs.find(c => c.name === targetCity) || cityConfigs[0]
@@ -173,7 +173,7 @@ content.post('/generate', async (c) => {
     }
     
     // 插入数据库
-    const inserted = await db.insert(complaints).values(generated).returning()
+    const inserted = await db.insert(complaints).values(generated as any).returning()
     
     return c.json({
       success: true,
@@ -221,7 +221,7 @@ content.post('/generate-all', async (c) => {
           isAnonymous: true,
           likesCount: Math.floor(Math.random() * 5000),
           commentsCount: Math.floor(Math.random() * 500),
-        })
+        } as any)
         totalGenerated++
       }
       
@@ -247,7 +247,7 @@ content.post('/generate-all', async (c) => {
           isAnonymous: true,
           likesCount: Math.floor(Math.random() * 3000),
           commentsCount: Math.floor(Math.random() * 200),
-        })
+        } as any)
         totalGenerated++
       }
     }

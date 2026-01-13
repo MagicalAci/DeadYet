@@ -97,7 +97,7 @@ export const userService = {
     const aiResponse = generateAIResponse(complaint, mood)
     
     // 创建签到记录
-    const newCheckIn: NewCheckIn = {
+    const newCheckIn: any = {
       userId,
       complaint,
       aiResponse,
@@ -109,7 +109,7 @@ export const userService = {
       bannerGenerated: true,
     }
     
-    const [record] = await db.insert(checkIns).values(newCheckIn).returning()
+    const [record] = await db.insert(checkIns).values(newCheckIn as any).returning()
     
     // 更新用户统计
     const isConsecutive = user.lastCheckIn && 

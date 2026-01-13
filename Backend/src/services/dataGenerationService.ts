@@ -17,259 +17,14 @@ import {
   CityConfig, DistrictConfig, HotSpotConfig
 } from '../data/geoData'
 
-// 重新导出地理数据（保持兼容）
-export { CITIES as CITY_CONFIGS, DISTRICTS as DISTRICT_CONFIGS, HOTSPOTS as HOTSPOT_CONFIGS } from '../data/geoData'
+// 使用导入的配置（创建本地别名以保持兼容）
+const CITY_CONFIGS = CITIES
+const DISTRICT_CONFIGS = DISTRICTS
+const HOTSPOT_CONFIGS = HOTSPOTS
 
-// ==================== 城市配置（真实数据） ====================
-
-interface CityConfig {
-  name: string
-  province: string
-  tier: 1 | 2 | 3  // 1=一线 2=新一线 3=二线
-  lat: number
-  lon: number
-  // 加班指数：1.0=正常，1.3=严重加班，0.8=较轻松
-  overtimeIndex: number
-  // 打工人基数（万人）
-  workerBase: number
-  // 平均下班时间（24小时制）
-  avgCheckoutHour: number
-  // 行业特点
-  industries: string[]
-}
-
-export const CITY_CONFIGS: CityConfig[] = [
-  // === 一线城市（加班严重）===
-  { name: '北京', province: '北京', tier: 1, lat: 39.9042, lon: 116.4074, 
-    overtimeIndex: 1.35, workerBase: 25, avgCheckoutHour: 21.5, 
-    industries: ['互联网', '金融', '教育', '传媒'] },
-  { name: '上海', province: '上海', tier: 1, lat: 31.2304, lon: 121.4737,
-    overtimeIndex: 1.3, workerBase: 22, avgCheckoutHour: 21.0,
-    industries: ['金融', '贸易', '互联网', '制造'] },
-  { name: '深圳', province: '广东', tier: 1, lat: 22.5431, lon: 114.0579,
-    overtimeIndex: 1.4, workerBase: 18, avgCheckoutHour: 22.0,
-    industries: ['互联网', '硬件', '金融', '电商'] },
-  { name: '广州', province: '广东', tier: 1, lat: 23.1291, lon: 113.2644,
-    overtimeIndex: 1.2, workerBase: 15, avgCheckoutHour: 20.5,
-    industries: ['贸易', '制造', '互联网', '传媒'] },
-    
-  // === 新一线城市 ===
-  { name: '杭州', province: '浙江', tier: 2, lat: 30.2741, lon: 120.1551,
-    overtimeIndex: 1.35, workerBase: 12, avgCheckoutHour: 21.5,
-    industries: ['电商', '互联网', '金融科技'] },
-  { name: '成都', province: '四川', tier: 2, lat: 30.5728, lon: 104.0668,
-    overtimeIndex: 0.95, workerBase: 10, avgCheckoutHour: 19.5,
-    industries: ['游戏', '互联网', '传媒'] },
-  { name: '南京', province: '江苏', tier: 2, lat: 32.0603, lon: 118.7969,
-    overtimeIndex: 1.1, workerBase: 8, avgCheckoutHour: 20.0,
-    industries: ['软件', '制造', '教育'] },
-  { name: '武汉', province: '湖北', tier: 2, lat: 30.5928, lon: 114.3055,
-    overtimeIndex: 1.05, workerBase: 8, avgCheckoutHour: 20.0,
-    industries: ['光电', '汽车', '教育'] },
-  { name: '西安', province: '陕西', tier: 2, lat: 34.3416, lon: 108.9398,
-    overtimeIndex: 1.0, workerBase: 7, avgCheckoutHour: 19.5,
-    industries: ['航天', '软件', '教育'] },
-  { name: '苏州', province: '江苏', tier: 2, lat: 31.2989, lon: 120.5853,
-    overtimeIndex: 1.15, workerBase: 6, avgCheckoutHour: 20.5,
-    industries: ['制造', '生物医药', '软件'] },
-  { name: '重庆', province: '重庆', tier: 2, lat: 29.4316, lon: 106.9123,
-    overtimeIndex: 0.9, workerBase: 8, avgCheckoutHour: 19.0,
-    industries: ['汽车', '电子', '制造'] },
-  { name: '天津', province: '天津', tier: 2, lat: 39.3434, lon: 117.3616,
-    overtimeIndex: 1.0, workerBase: 6, avgCheckoutHour: 19.5,
-    industries: ['制造', '港口', '金融'] },
-  { name: '郑州', province: '河南', tier: 2, lat: 34.7466, lon: 113.6254,
-    overtimeIndex: 1.0, workerBase: 5, avgCheckoutHour: 19.5,
-    industries: ['电商', '制造', '物流'] },
-  { name: '长沙', province: '湖南', tier: 2, lat: 28.2282, lon: 112.9388,
-    overtimeIndex: 0.95, workerBase: 5, avgCheckoutHour: 19.0,
-    industries: ['传媒', '制造', '文娱'] },
-    
-  // === 二线城市 ===
-  { name: '青岛', province: '山东', tier: 3, lat: 36.0671, lon: 120.3826,
-    overtimeIndex: 0.9, workerBase: 4, avgCheckoutHour: 18.5,
-    industries: ['制造', '港口', '旅游'] },
-  { name: '沈阳', province: '辽宁', tier: 3, lat: 41.8057, lon: 123.4315,
-    overtimeIndex: 0.85, workerBase: 4, avgCheckoutHour: 18.0,
-    industries: ['装备制造', '汽车'] },
-  { name: '济南', province: '山东', tier: 3, lat: 36.6512, lon: 117.1201,
-    overtimeIndex: 0.9, workerBase: 4, avgCheckoutHour: 18.5,
-    industries: ['软件', '医药', '金融'] },
-  { name: '厦门', province: '福建', tier: 3, lat: 24.4798, lon: 118.0894,
-    overtimeIndex: 0.95, workerBase: 3, avgCheckoutHour: 19.0,
-    industries: ['软件', '贸易', '旅游'] },
-  { name: '福州', province: '福建', tier: 3, lat: 26.0745, lon: 119.2965,
-    overtimeIndex: 0.9, workerBase: 3, avgCheckoutHour: 18.5,
-    industries: ['软件', '制造'] },
-  { name: '合肥', province: '安徽', tier: 3, lat: 31.8206, lon: 117.2272,
-    overtimeIndex: 1.05, workerBase: 4, avgCheckoutHour: 19.5,
-    industries: ['家电', '半导体', '新能源'] },
-  { name: '大连', province: '辽宁', tier: 3, lat: 38.9140, lon: 121.6147,
-    overtimeIndex: 0.9, workerBase: 3, avgCheckoutHour: 18.5,
-    industries: ['软件外包', '港口', '旅游'] },
-  { name: '昆明', province: '云南', tier: 3, lat: 24.8801, lon: 102.8329,
-    overtimeIndex: 0.8, workerBase: 3, avgCheckoutHour: 18.0,
-    industries: ['旅游', '生物医药'] },
-  { name: '哈尔滨', province: '黑龙江', tier: 3, lat: 45.8038, lon: 126.5349,
-    overtimeIndex: 0.8, workerBase: 3, avgCheckoutHour: 18.0,
-    industries: ['装备制造', '农业'] },
-  { name: '长春', province: '吉林', tier: 3, lat: 43.8171, lon: 125.3235,
-    overtimeIndex: 0.85, workerBase: 3, avgCheckoutHour: 18.0,
-    industries: ['汽车', '装备制造'] },
-  { name: '南昌', province: '江西', tier: 3, lat: 28.6820, lon: 115.8579,
-    overtimeIndex: 0.9, workerBase: 2, avgCheckoutHour: 18.5,
-    industries: ['电子', '制造'] },
-  { name: '无锡', province: '江苏', tier: 3, lat: 31.4912, lon: 120.3119,
-    overtimeIndex: 1.0, workerBase: 4, avgCheckoutHour: 19.0,
-    industries: ['半导体', '物联网', '制造'] },
-  { name: '宁波', province: '浙江', tier: 3, lat: 29.8683, lon: 121.5440,
-    overtimeIndex: 0.95, workerBase: 4, avgCheckoutHour: 18.5,
-    industries: ['港口', '制造', '贸易'] },
-  { name: '东莞', province: '广东', tier: 3, lat: 23.0208, lon: 113.7518,
-    overtimeIndex: 1.2, workerBase: 5, avgCheckoutHour: 20.0,
-    industries: ['电子制造', '代工'] },
-  { name: '佛山', province: '广东', tier: 3, lat: 23.0218, lon: 113.1218,
-    overtimeIndex: 1.0, workerBase: 4, avgCheckoutHour: 19.0,
-    industries: ['家电', '陶瓷', '制造'] },
-  { name: '贵阳', province: '贵州', tier: 3, lat: 26.6470, lon: 106.6302,
-    overtimeIndex: 0.85, workerBase: 2, avgCheckoutHour: 18.0,
-    industries: ['大数据', '旅游'] },
-]
-
-// ==================== 区域配置 ====================
-
-interface DistrictConfig {
-  city: string
-  name: string
-  latOffset: number
-  lonOffset: number
-  // 区域加班系数（相对城市）
-  overtimeMultiplier: number
-  // 主要类型
-  type: 'tech' | 'finance' | 'industrial' | 'mixed' | 'residential'
-}
-
-export const DISTRICT_CONFIGS: DistrictConfig[] = [
-  // 北京
-  { city: '北京', name: '海淀区', latOffset: 0.05, lonOffset: -0.1, overtimeMultiplier: 1.3, type: 'tech' },
-  { city: '北京', name: '朝阳区', latOffset: 0.02, lonOffset: 0.08, overtimeMultiplier: 1.2, type: 'mixed' },
-  { city: '北京', name: '西城区', latOffset: -0.01, lonOffset: -0.02, overtimeMultiplier: 1.25, type: 'finance' },
-  { city: '北京', name: '东城区', latOffset: -0.01, lonOffset: 0.02, overtimeMultiplier: 1.1, type: 'mixed' },
-  { city: '北京', name: '丰台区', latOffset: -0.08, lonOffset: -0.02, overtimeMultiplier: 0.9, type: 'residential' },
-  { city: '北京', name: '大兴区', latOffset: -0.15, lonOffset: 0.05, overtimeMultiplier: 1.1, type: 'industrial' },
-  { city: '北京', name: '昌平区', latOffset: 0.15, lonOffset: 0.02, overtimeMultiplier: 1.0, type: 'tech' },
-  { city: '北京', name: '通州区', latOffset: -0.02, lonOffset: 0.25, overtimeMultiplier: 0.85, type: 'residential' },
-  
-  // 上海
-  { city: '上海', name: '浦东新区', latOffset: 0.02, lonOffset: 0.15, overtimeMultiplier: 1.25, type: 'mixed' },
-  { city: '上海', name: '黄浦区', latOffset: -0.01, lonOffset: -0.02, overtimeMultiplier: 1.3, type: 'finance' },
-  { city: '上海', name: '徐汇区', latOffset: -0.05, lonOffset: -0.05, overtimeMultiplier: 1.2, type: 'tech' },
-  { city: '上海', name: '静安区', latOffset: 0.02, lonOffset: -0.02, overtimeMultiplier: 1.25, type: 'finance' },
-  { city: '上海', name: '长宁区', latOffset: 0.01, lonOffset: -0.1, overtimeMultiplier: 1.1, type: 'mixed' },
-  { city: '上海', name: '虹口区', latOffset: 0.03, lonOffset: 0.02, overtimeMultiplier: 1.0, type: 'mixed' },
-  { city: '上海', name: '杨浦区', latOffset: 0.05, lonOffset: 0.05, overtimeMultiplier: 1.05, type: 'tech' },
-  { city: '上海', name: '闵行区', latOffset: -0.1, lonOffset: -0.08, overtimeMultiplier: 1.15, type: 'industrial' },
-  
-  // 深圳
-  { city: '深圳', name: '南山区', latOffset: 0.02, lonOffset: -0.08, overtimeMultiplier: 1.4, type: 'tech' },
-  { city: '深圳', name: '福田区', latOffset: 0.0, lonOffset: 0.02, overtimeMultiplier: 1.25, type: 'finance' },
-  { city: '深圳', name: '罗湖区', latOffset: -0.02, lonOffset: 0.08, overtimeMultiplier: 1.0, type: 'mixed' },
-  { city: '深圳', name: '宝安区', latOffset: 0.08, lonOffset: -0.15, overtimeMultiplier: 1.15, type: 'industrial' },
-  { city: '深圳', name: '龙岗区', latOffset: 0.05, lonOffset: 0.2, overtimeMultiplier: 1.35, type: 'tech' },
-  { city: '深圳', name: '龙华区', latOffset: 0.1, lonOffset: 0.05, overtimeMultiplier: 1.2, type: 'industrial' },
-  
-  // 广州
-  { city: '广州', name: '天河区', latOffset: 0.02, lonOffset: 0.05, overtimeMultiplier: 1.25, type: 'tech' },
-  { city: '广州', name: '越秀区', latOffset: 0.0, lonOffset: -0.02, overtimeMultiplier: 1.1, type: 'mixed' },
-  { city: '广州', name: '海珠区', latOffset: -0.03, lonOffset: 0.02, overtimeMultiplier: 1.0, type: 'mixed' },
-  { city: '广州', name: '白云区', latOffset: 0.1, lonOffset: 0.0, overtimeMultiplier: 0.9, type: 'residential' },
-  { city: '广州', name: '番禺区', latOffset: -0.12, lonOffset: 0.05, overtimeMultiplier: 0.95, type: 'residential' },
-  { city: '广州', name: '黄埔区', latOffset: 0.05, lonOffset: 0.15, overtimeMultiplier: 1.15, type: 'industrial' },
-  
-  // 杭州
-  { city: '杭州', name: '西湖区', latOffset: 0.0, lonOffset: -0.05, overtimeMultiplier: 1.1, type: 'mixed' },
-  { city: '杭州', name: '滨江区', latOffset: -0.05, lonOffset: 0.02, overtimeMultiplier: 1.4, type: 'tech' },
-  { city: '杭州', name: '余杭区', latOffset: 0.1, lonOffset: -0.08, overtimeMultiplier: 1.45, type: 'tech' },
-  { city: '杭州', name: '拱墅区', latOffset: 0.03, lonOffset: -0.02, overtimeMultiplier: 1.0, type: 'mixed' },
-  { city: '杭州', name: '上城区', latOffset: -0.02, lonOffset: 0.02, overtimeMultiplier: 1.05, type: 'finance' },
-  { city: '杭州', name: '萧山区', latOffset: -0.1, lonOffset: 0.08, overtimeMultiplier: 1.1, type: 'industrial' },
-  
-  // 成都
-  { city: '成都', name: '武侯区', latOffset: -0.02, lonOffset: -0.02, overtimeMultiplier: 1.0, type: 'mixed' },
-  { city: '成都', name: '锦江区', latOffset: 0.0, lonOffset: 0.03, overtimeMultiplier: 0.95, type: 'mixed' },
-  { city: '成都', name: '青羊区', latOffset: 0.02, lonOffset: -0.05, overtimeMultiplier: 0.9, type: 'mixed' },
-  { city: '成都', name: '高新区', latOffset: -0.08, lonOffset: 0.02, overtimeMultiplier: 1.15, type: 'tech' },
-  { city: '成都', name: '天府新区', latOffset: -0.15, lonOffset: 0.1, overtimeMultiplier: 1.1, type: 'tech' },
-]
-
-// ==================== 热门地点配置 ====================
-
-interface HotSpotConfig {
-  city: string
-  district: string
-  name: string
-  type: 'techPark' | 'cbd' | 'industrial' | 'office'
-  // 加班程度
-  overtimeLevel: 'extreme' | 'heavy' | 'normal' | 'light'
-  tags: string[]
-  workerCount: number  // 该地点打工人数量
-}
-
-export const HOTSPOT_CONFIGS: HotSpotConfig[] = [
-  // 北京 - 996重灾区
-  { city: '北京', district: '海淀区', name: '后厂村', type: 'techPark', 
-    overtimeLevel: 'extreme', tags: ['996发源地', '大厂云集', '头发杀手'], workerCount: 80000 },
-  { city: '北京', district: '海淀区', name: '中关村', type: 'techPark',
-    overtimeLevel: 'heavy', tags: ['互联网重灾区', '程序员聚集地'], workerCount: 60000 },
-  { city: '北京', district: '海淀区', name: '西二旗', type: 'techPark',
-    overtimeLevel: 'extreme', tags: ['码农天堂', '脱发圣地'], workerCount: 50000 },
-  { city: '北京', district: '朝阳区', name: '望京SOHO', type: 'office',
-    overtimeLevel: 'heavy', tags: ['创业公司扎堆', '加班重灾区'], workerCount: 35000 },
-  { city: '北京', district: '朝阳区', name: '国贸CBD', type: 'cbd',
-    overtimeLevel: 'heavy', tags: ['金融精英', '西装革履'], workerCount: 45000 },
-  { city: '北京', district: '西城区', name: '金融街', type: 'cbd',
-    overtimeLevel: 'heavy', tags: ['银行总部', '加班到头秃'], workerCount: 40000 },
-  { city: '北京', district: '大兴区', name: '亦庄经济开发区', type: 'industrial',
-    overtimeLevel: 'normal', tags: ['制造业聚集', '通勤噩梦'], workerCount: 30000 },
-    
-  // 上海
-  { city: '上海', district: '浦东新区', name: '陆家嘴', type: 'cbd',
-    overtimeLevel: 'heavy', tags: ['金融中心', '高薪高压'], workerCount: 55000 },
-  { city: '上海', district: '浦东新区', name: '张江高科', type: 'techPark',
-    overtimeLevel: 'heavy', tags: ['芯片半导体', '研发重镇'], workerCount: 45000 },
-  { city: '上海', district: '徐汇区', name: '漕河泾', type: 'techPark',
-    overtimeLevel: 'heavy', tags: ['老牌园区', '互联网公司多'], workerCount: 40000 },
-  { city: '上海', district: '静安区', name: '静安寺', type: 'cbd',
-    overtimeLevel: 'normal', tags: ['时尚地标', '白领聚集'], workerCount: 25000 },
-  { city: '上海', district: '长宁区', name: '虹桥商务区', type: 'cbd',
-    overtimeLevel: 'normal', tags: ['交通枢纽', '出差多'], workerCount: 30000 },
-    
-  // 深圳 - 加班最狠
-  { city: '深圳', district: '南山区', name: '南山科技园', type: 'techPark',
-    overtimeLevel: 'extreme', tags: ['腾讯总部', '大厂扎堆'], workerCount: 70000 },
-  { city: '深圳', district: '南山区', name: '后海', type: 'cbd',
-    overtimeLevel: 'heavy', tags: ['新CBD', '海景加班'], workerCount: 35000 },
-  { city: '深圳', district: '福田区', name: '华强北', type: 'industrial',
-    overtimeLevel: 'normal', tags: ['电子一条街', '创业者天堂'], workerCount: 25000 },
-  { city: '深圳', district: '南山区', name: '前海', type: 'cbd',
-    overtimeLevel: 'heavy', tags: ['金融特区', '新贵聚集'], workerCount: 30000 },
-  { city: '深圳', district: '龙岗区', name: '坂田', type: 'techPark',
-    overtimeLevel: 'extreme', tags: ['华为基地', '狼性文化'], workerCount: 60000 },
-    
-  // 杭州 - 电商重镇
-  { city: '杭州', district: '余杭区', name: '未来科技城', type: 'techPark',
-    overtimeLevel: 'extreme', tags: ['阿里巴巴', '电商重镇'], workerCount: 55000 },
-  { city: '杭州', district: '滨江区', name: '滨江区块', type: 'techPark',
-    overtimeLevel: 'heavy', tags: ['网易、海康', '互联网新贵'], workerCount: 40000 },
-  { city: '杭州', district: '西湖区', name: '西溪', type: 'office',
-    overtimeLevel: 'normal', tags: ['创意园区', '环境最美'], workerCount: 20000 },
-    
-  // 成都 - 相对轻松
-  { city: '成都', district: '高新区', name: '天府软件园', type: 'techPark',
-    overtimeLevel: 'normal', tags: ['游戏公司多', '相对轻松'], workerCount: 35000 },
-  { city: '成都', district: '武侯区', name: '武侯新城', type: 'mixed',
-    overtimeLevel: 'light', tags: ['创业氛围', '生活节奏慢'], workerCount: 20000 },
-]
+// 重新导出供其他模块使用
+export { CITY_CONFIGS, DISTRICT_CONFIGS, HOTSPOT_CONFIGS }
+export type { CityConfig, DistrictConfig, HotSpotConfig }
 
 // ==================== 时间算法 ====================
 
@@ -638,7 +393,7 @@ export class DataGenerationService {
         })
       }
       
-      await db.insert(users).values(batch)
+      await db.insert(users).values(batch as any)
       created += currentBatch
       
       if (created % 10000 === 0) {
@@ -706,8 +461,8 @@ export class DataGenerationService {
           userEmoji: randomPick(EMOJIS),
           isAnonymous: true,
           isAiGenerated: true,
-          latitude: cityConfig.lat + (district?.latOffset || 0) + (Math.random() - 0.5) * 0.02,
-          longitude: cityConfig.lon + (district?.lonOffset || 0) + (Math.random() - 0.5) * 0.02,
+          latitude: (district?.lat || cityConfig.lat) + (Math.random() - 0.5) * 0.02,
+          longitude: (district?.lon || cityConfig.lon) + (Math.random() - 0.5) * 0.02,
           city: cityConfig.name,
           district: district?.name,
           likesCount,
@@ -716,7 +471,7 @@ export class DataGenerationService {
         })
       }
       
-      await db.insert(complaints).values(batch)
+      await db.insert(complaints).values(batch as any)
       created += currentBatch
       
       if (created % 5000 === 0) {
@@ -788,7 +543,7 @@ export class DataGenerationService {
       }
       
       if (commentBatch.length > 0) {
-        await db.insert(comments).values(commentBatch)
+        await db.insert(comments).values(commentBatch as any)
         totalCreated += commentBatch.length
       }
       
@@ -820,7 +575,7 @@ export class DataGenerationService {
         checkedIn: stats.checkedIn,
         stillWorking: stats.stillWorking,
         averageCheckOutTime: stats.avgCheckoutTime,
-      }).onConflictDoUpdate({
+      } as any).onConflictDoUpdate({
         target: cityStats.city,
         set: {
           totalWorkers: stats.totalWorkers,
@@ -828,7 +583,7 @@ export class DataGenerationService {
           stillWorking: stats.stillWorking,
           averageCheckOutTime: stats.avgCheckoutTime,
           updatedAt: new Date(),
-        }
+        } as any
       })
     }
     
@@ -858,12 +613,12 @@ export class DataGenerationService {
       await db.insert(districtStats).values({
         city: district.city,
         district: district.name,
-        latitude: cityConfig.lat + district.latOffset,
-        longitude: cityConfig.lon + district.lonOffset,
+        latitude: district.lat,
+        longitude: district.lon,
         totalWorkers: districtWorkers,
         checkedIn: Math.round(districtWorkers * (1 - workingRate)),
         stillWorking: Math.round(districtWorkers * workingRate),
-      })
+      } as any)
     }
     
     console.log(`区域统计初始化完成，共 ${DISTRICT_CONFIGS.length} 个区域`)
@@ -902,14 +657,14 @@ export class DataGenerationService {
         type: spot.type,
         city: spot.city,
         district: spot.district,
-        latitude: cityConfig.lat + (districtConfig?.latOffset || 0) + (Math.random() - 0.5) * 0.01,
-        longitude: cityConfig.lon + (districtConfig?.lonOffset || 0) + (Math.random() - 0.5) * 0.01,
+        latitude: (districtConfig?.lat || cityConfig.lat) + (Math.random() - 0.5) * 0.01,
+        longitude: (districtConfig?.lon || cityConfig.lon) + (Math.random() - 0.5) * 0.01,
         totalWorkers: spot.workerCount,
         checkedIn: Math.round(spot.workerCount * (1 - workingRate)),
         stillWorking: Math.round(spot.workerCount * workingRate),
         averageCheckOutTime: `${avgHour}:${avgMin.toString().padStart(2, '0')}`,
         tags: spot.tags,
-      })
+      } as any)
     }
     
     console.log(`热门地点初始化完成，共 ${HOTSPOT_CONFIGS.length} 个地点`)
