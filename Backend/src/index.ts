@@ -17,6 +17,7 @@ import mapRoutes from './routes/map.js'
 import complaintsRoutes from './routes/complaints.js'
 import aiRoutes from './routes/ai.js'
 import pushRoutes from './routes/push.js'
+import uploadRoutes from './routes/upload.js'
 
 const app = new Hono()
 
@@ -62,6 +63,12 @@ app.route('/api/map', mapRoutes)
 app.route('/api/complaints', complaintsRoutes)
 app.route('/api/ai', aiRoutes)
 app.route('/api/push', pushRoutes)
+app.route('/api/upload', uploadRoutes)
+
+// 设计资源上传页面
+app.get('/upload', (c) => {
+  return c.redirect('/api/upload')
+})
 
 // 404处理
 app.notFound((c) => {
