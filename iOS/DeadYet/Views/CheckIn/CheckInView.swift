@@ -9,10 +9,9 @@ struct CheckInView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var userService: UserService
     
-    @State private var complaint: String = ""
-    @State private var selectedMood: CheckInRecord.Mood = .neutral
     @State private var isCheckedIn: Bool = false
     @State private var isLoading: Bool = false
+    @State private var showComplaintSheet: Bool = false
     @State private var showBanner: Bool = false
     @State private var aiResponse: String = ""
     @State private var currentTime: Date = Date()
@@ -21,6 +20,11 @@ struct CheckInView: View {
     @State private var pulseAnimation: Bool = false
     @State private var bannerScale: CGFloat = 0.5
     @State private var bannerRotation: Double = -10
+    @State private var buttonBounce: Bool = false
+    
+    // 抱怨数据（打卡后填写）
+    @State private var complaint: String = ""
+    @State private var selectedMood: CheckInRecord.Mood = .neutral
     
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
@@ -37,16 +41,15 @@ struct CheckInView: View {
                     // 存活天数卡片
                     survivalCard
                     
-                    // 心情选择
-                    moodSelector
+                    Spacer(minLength: 40)
                     
-                    // 抱怨输入
-                    complaintInput
+                    // 主打卡按钮
+                    mainCheckInButton
                     
-                    // 签到按钮
-                    checkInButton
+                    // 打卡提示
+                    checkInHint
                     
-                    // AI回复区域
+                    // AI回复区域（打卡后显示）
                     if !aiResponse.isEmpty {
                         aiResponseCard
                     }
@@ -55,6 +58,11 @@ struct CheckInView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 20)
+            }
+            
+            // 抱怨输入弹窗（打卡后唤起）
+            if showComplaintSheet {
+                complaintSheetOverlay
             }
             
             // 锦旗弹窗
@@ -210,148 +218,97 @@ struct CheckInView: View {
         .frame(maxWidth: .infinity)
     }
     
-    // MARK: - Mood Selector
-    private var moodSelector: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("今天心情怎样？")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.gray)
-            
-            HStack(spacing: 8) {
-                ForEach(CheckInRecord.Mood.allCases, id: \.self) { mood in
-                    moodButton(mood)
+    // MARK: - Main Check In Button
+    private var mainCheckInButton: some View {
+        Button(action: performCheckIn) {
+            ZStack {
+                // 脉冲背景动画
+                if !isCheckedIn && !isLoading {
+                    Circle()
+                        .fill(Color.deadRed.opacity(0.2))
+                        .frame(width: 200, height: 200)
+                        .scaleEffect(buttonBounce ? 1.1 : 1)
+                        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: buttonBounce)
                 }
-            }
-        }
-    }
-    
-    private func moodButton(_ mood: CheckInRecord.Mood) -> some View {
-        Button {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                selectedMood = mood
-            }
-            haptic(.light)
-        } label: {
-            VStack(spacing: 4) {
-                Text(mood.emoji)
-                    .font(.system(size: 28))
                 
-                Text(mood.rawValue)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(selectedMood == mood ? .white : .gray)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(selectedMood == mood ? Color.deadRed.opacity(0.3) : Color.cardBg)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(selectedMood == mood ? Color.deadRed : Color.clear, lineWidth: 2)
+                // 主按钮
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: isCheckedIn 
+                                    ? [Color.aliveGreen, Color(hex: "2ECC71")]
+                                    : [Color.deadRed, Color(hex: "FF6B5B")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 160, height: 160)
+                        .shadow(color: (isCheckedIn ? Color.aliveGreen : Color.deadRed).opacity(0.5), radius: 20, y: 10)
+                    
+                    VStack(spacing: 8) {
+                        if isLoading {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                .scaleEffect(1.5)
+                        } else if isCheckedIn {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 50, weight: .bold))
+                            Text("已打卡")
+                                .font(.system(size: 18, weight: .bold))
+                        } else {
+                            Image(systemName: "hand.raised.fill")
+                                .font(.system(size: 50, weight: .medium))
+                            Text("下班打卡")
+                                .font(.system(size: 18, weight: .bold))
+                        }
+                    }
+                    .foregroundColor(.white)
+                }
             }
         }
         .buttonStyle(.plain)
-    }
-    
-    // MARK: - Complaint Input
-    private var complaintInput: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("想骂什么？（可选）")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.gray)
-                
-                Spacer()
-                
-                // 语音输入按钮
-                Button {
-                    // TODO: 语音输入
-                    haptic(.light)
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "mic.fill")
-                        Text("语音")
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.deadRed)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.deadRed.opacity(0.15))
-                    .clipShape(Capsule())
-                }
-            }
-            
-            TextEditor(text: $complaint)
-                .font(.system(size: 16))
-                .foregroundColor(.white)
-                .frame(height: 100)
-                .padding(12)
-                .scrollContentBackground(.hidden)
-                .background(Color.cardBg)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                }
-                .overlay(alignment: .topLeading) {
-                    if complaint.isEmpty {
-                        Text("今天工作怎么折磨你了？随便骂几句吧...")
-                            .font(.system(size: 16))
-                            .foregroundColor(.gray.opacity(0.5))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 20)
-                            .allowsHitTesting(false)
-                    }
-                }
+        .disabled(isLoading || isCheckedIn)
+        .onAppear {
+            buttonBounce = true
         }
     }
     
-    // MARK: - Check In Button
-    private var checkInButton: some View {
-        Button(action: performCheckIn) {
-            HStack(spacing: 12) {
-                if isLoading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                } else if isCheckedIn {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 24))
-                    Text("已打卡")
-                        .font(.system(size: 20, weight: .bold))
-                } else {
-                    Image(systemName: "hand.raised.fill")
-                        .font(.system(size: 24))
-                    Text("老子下班了！")
-                        .font(.system(size: 20, weight: .bold))
+    // MARK: - Check In Hint
+    private var checkInHint: some View {
+        Text(isCheckedIn ? "今天辛苦了，牛马 🐂" : "点击打卡，证明你还活着")
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.gray)
+            .padding(.top, 8)
+    }
+    
+    // MARK: - Complaint Sheet Overlay (打卡后弹出)
+    private var complaintSheetOverlay: some View {
+        ZStack {
+            // 背景遮罩
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    // 点击背景可跳过，直接显示锦旗
+                    submitComplaintAndShowBanner()
                 }
-            }
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 20)
-            .background(
-                Group {
-                    if isCheckedIn {
-                        LinearGradient(
-                            colors: [Color.aliveGreen, Color(hex: "2ECC71")],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    } else {
-                        LinearGradient(
-                            colors: [Color.deadRed, Color(hex: "FF6B5B")],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    }
+            
+            // 抱怨输入卡片
+            ComplaintInputSheet(
+                complaint: $complaint,
+                selectedMood: $selectedMood,
+                onSubmit: {
+                    submitComplaintAndShowBanner()
+                },
+                onSkip: {
+                    submitComplaintAndShowBanner()
                 }
             )
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-            .shadow(color: (isCheckedIn ? Color.aliveGreen : Color.deadRed).opacity(0.4), radius: 15, y: 5)
-            .scaleEffect(isLoading ? 0.98 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isLoading)
+            .transition(.asymmetric(
+                insertion: .move(edge: .bottom).combined(with: .opacity),
+                removal: .move(edge: .bottom).combined(with: .opacity)
+            ))
         }
-        .disabled(isLoading || isCheckedIn)
     }
     
     // MARK: - AI Response Card
@@ -419,33 +376,59 @@ struct CheckInView: View {
         isLoading = true
         haptic(.medium)
         
+        // 先执行打卡（不带抱怨）
         Task {
             do {
+                // 先打卡
                 let record = try await userService.checkIn(
-                    complaint: complaint.isEmpty ? nil : complaint,
-                    mood: selectedMood
+                    complaint: nil,
+                    mood: .neutral
                 )
                 
                 haptic(.success)
                 
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                await MainActor.run {
+                    isLoading = false
                     isCheckedIn = true
                     aiResponse = record.aiResponse ?? ""
-                }
-                
-                // 显示锦旗
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    withAnimation {
-                        showBanner = true
+                    
+                    // 打卡成功后，弹出抱怨输入界面
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            showComplaintSheet = true
+                        }
                     }
                 }
                 
             } catch {
                 haptic(.error)
-                // 显示错误
+                isLoading = false
             }
-            
-            isLoading = false
+        }
+    }
+    
+    private func submitComplaintAndShowBanner() {
+        // 关闭抱怨输入界面
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            showComplaintSheet = false
+        }
+        
+        // 如果有抱怨内容，更新到服务器
+        if !complaint.isEmpty {
+            Task {
+                // 更新抱怨和心情
+                try? await userService.updateComplaint(
+                    complaint: complaint,
+                    mood: selectedMood
+                )
+            }
+        }
+        
+        // 显示锦旗
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation {
+                showBanner = true
+            }
         }
     }
     
@@ -463,6 +446,299 @@ struct CheckInView: View {
     }
 }
 
+// MARK: - Complaint Input Sheet
+struct ComplaintInputSheet: View {
+    @Binding var complaint: String
+    @Binding var selectedMood: CheckInRecord.Mood
+    let onSubmit: () -> Void
+    let onSkip: () -> Void
+    
+    @StateObject private var speechService = SpeechService()
+    @State private var isRecording: Bool = false
+    @FocusState private var isTextFieldFocused: Bool
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // 拖拽指示条
+            Capsule()
+                .fill(Color.white.opacity(0.3))
+                .frame(width: 40, height: 5)
+                .padding(.top, 12)
+                .padding(.bottom, 20)
+            
+            // 标题
+            VStack(spacing: 8) {
+                Text("🎉 打卡成功！")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white)
+                
+                Text("想骂点什么？（可选）")
+                    .font(.system(size: 15))
+                    .foregroundColor(.gray)
+            }
+            .padding(.bottom, 24)
+            
+            // 心情选择
+            VStack(alignment: .leading, spacing: 12) {
+                Text("今天心情")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.gray)
+                
+                HStack(spacing: 8) {
+                    ForEach(CheckInRecord.Mood.allCases, id: \.self) { mood in
+                        moodButton(mood)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            
+            // 语音/文字输入区域
+            VStack(spacing: 16) {
+                // 语音按钮（大号）
+                VoiceRecordButton(
+                    isRecording: $isRecording,
+                    transcribedText: $complaint,
+                    speechService: speechService
+                )
+                
+                // 或者文字输入
+                HStack(spacing: 12) {
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: 1)
+                    Text("或者打字")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: 1)
+                }
+                .padding(.horizontal, 40)
+                
+                // 文字输入框
+                TextEditor(text: $complaint)
+                    .font(.system(size: 16))
+                    .foregroundColor(.white)
+                    .frame(height: 80)
+                    .padding(12)
+                    .scrollContentBackground(.hidden)
+                    .background(Color(hex: "2C2C2E"))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14)
+                            .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    }
+                    .overlay(alignment: .topLeading) {
+                        if complaint.isEmpty {
+                            Text("今天工作怎么折磨你了？")
+                                .font(.system(size: 16))
+                                .foregroundColor(.gray.opacity(0.5))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 20)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .focused($isTextFieldFocused)
+                    .padding(.horizontal, 20)
+            }
+            
+            // 按钮区域
+            HStack(spacing: 12) {
+                // 跳过按钮
+                Button(action: onSkip) {
+                    Text("跳过")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.gray)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(hex: "3C3C3E"))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+                
+                // 提交按钮
+                Button(action: onSubmit) {
+                    HStack(spacing: 8) {
+                        Text("发送")
+                            .font(.system(size: 16, weight: .bold))
+                        Image(systemName: "paperplane.fill")
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.deadRed, Color(hex: "FF6B5B")],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 40)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 24)
+                .fill(Color(hex: "1C1C1E"))
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 20)
+    }
+    
+    private func moodButton(_ mood: CheckInRecord.Mood) -> some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                selectedMood = mood
+            }
+            haptic(.light)
+        } label: {
+            VStack(spacing: 4) {
+                Text(mood.emoji)
+                    .font(.system(size: 24))
+                
+                Text(mood.rawValue)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(selectedMood == mood ? .white : .gray)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(selectedMood == mood ? Color.deadRed.opacity(0.3) : Color(hex: "2C2C2E"))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(selectedMood == mood ? Color.deadRed : Color.clear, lineWidth: 2)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Voice Record Button
+struct VoiceRecordButton: View {
+    @Binding var isRecording: Bool
+    @Binding var transcribedText: String
+    @ObservedObject var speechService: SpeechService
+    
+    @State private var pulseAnimation: CGFloat = 1
+    @State private var showPermissionAlert: Bool = false
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            // 录音按钮
+            Button(action: toggleRecording) {
+                ZStack {
+                    // 脉冲动画背景
+                    if isRecording {
+                        Circle()
+                            .fill(Color.deadRed.opacity(0.3))
+                            .frame(width: 100, height: 100)
+                            .scaleEffect(pulseAnimation)
+                            .opacity(Double(2 - pulseAnimation))
+                    }
+                    
+                    // 主按钮
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: isRecording 
+                                    ? [Color.deadRed, Color(hex: "FF6B5B")]
+                                    : [Color(hex: "3C3C3E"), Color(hex: "2C2C2E")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 80, height: 80)
+                        .shadow(
+                            color: isRecording ? Color.deadRed.opacity(0.5) : .clear,
+                            radius: 15
+                        )
+                    
+                    // 图标
+                    VStack(spacing: 4) {
+                        Image(systemName: isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 30, weight: .medium))
+                            .foregroundColor(.white)
+                        
+                        if isRecording {
+                            Text("录音中...")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            
+            // 提示文字
+            Text(isRecording ? "再次点击停止" : "点击开始语音输入")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.gray)
+            
+            // 识别结果预览
+            if !speechService.transcribedText.isEmpty && isRecording {
+                Text(speechService.transcribedText)
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.8))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color(hex: "2C2C2E"))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .onAppear {
+            speechService.requestAuthorization()
+        }
+        .onChange(of: isRecording) { _, newValue in
+            if newValue {
+                withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) {
+                    pulseAnimation = 1.3
+                }
+            } else {
+                pulseAnimation = 1
+            }
+        }
+        .onChange(of: speechService.transcribedText) { _, newValue in
+            if !newValue.isEmpty {
+                transcribedText = newValue
+            }
+        }
+        .onChange(of: speechService.isRecording) { _, newValue in
+            isRecording = newValue
+        }
+        .alert("需要麦克风权限", isPresented: $showPermissionAlert) {
+            Button("去设置") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("取消", role: .cancel) { }
+        } message: {
+            Text("需要麦克风权限才能语音输入你的抱怨")
+        }
+    }
+    
+    private func toggleRecording() {
+        switch speechService.authorizationStatus {
+        case .authorized:
+            haptic(.medium)
+            speechService.toggleRecording()
+            isRecording = speechService.isRecording
+        case .denied, .restricted:
+            showPermissionAlert = true
+        case .notDetermined:
+            speechService.requestAuthorization()
+        @unknown default:
+            break
+        }
+    }
+}
+
 // MARK: - Preview
 struct CheckInView_Previews: PreviewProvider {
     static var previews: some View {
@@ -471,4 +747,3 @@ struct CheckInView_Previews: PreviewProvider {
             .environmentObject(UserService())
     }
 }
-

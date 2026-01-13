@@ -165,6 +165,23 @@ class UserService: ObservableObject {
         return responses.randomElement() ?? "今日存活 ✓"
     }
     
+    // MARK: - 更新抱怨内容（打卡后补充）
+    
+    func updateComplaint(complaint: String, mood: CheckInRecord.Mood) async throws {
+        guard currentUser != nil else {
+            throw UserError.notLoggedIn
+        }
+        
+        // TODO: 调用后端API更新今日抱怨
+        // try await apiClient.put("/api/checkin/today", body: [
+        //     "complaint": complaint,
+        //     "mood": mood.rawValue
+        // ])
+        
+        // 临时：只打印日志
+        print("📝 抱怨更新: \(complaint), 心情: \(mood.rawValue)")
+    }
+    
     // MARK: - 登出
     
     func logout() {
