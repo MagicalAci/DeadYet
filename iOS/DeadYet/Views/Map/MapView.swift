@@ -14,11 +14,16 @@ struct MapView: View {
     @State private var complaints: [Complaint] = []
     @State private var selectedCity: CityStats?
     @State private var showComplaintSheet: Bool = false
-    @State private var currentRegion = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
-        span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
+    @State private var mapCameraPosition: MapCameraPosition = .region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
+            span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
+        )
     )
-    @State private var mapCameraPosition: MapCameraPosition = .automatic
+    
+    // 用于缩放控制
+    @State private var zoomLevel: Double = 30
+    private let mapCenter = CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0)
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -30,14 +35,11 @@ struct MapView: View {
         }
         .onAppear {
             loadMockData()
-            mapCameraPosition = .region(currentRegion)
         }
-        .sheet(isPresented: $showComplaintSheet) {
-            if let city = selectedCity {
-                CityDetailSheet(city: city, complaints: complaints.filter { $0.location?.city == city.city })
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
+        .sheet(item: $selectedCity) { city in
+            CityDetailSheet(city: city, complaints: complaints.filter { $0.location?.city == city.city })
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
     
@@ -47,14 +49,9 @@ struct MapView: View {
             Map(position: $mapCameraPosition) {
                 ForEach(cityStats) { city in
                     Annotation(city.city, coordinate: CLLocationCoordinate2D(latitude: city.latitude, longitude: city.longitude)) {
-                        CityMarker(city: city)
-                            .onTapGesture {
-                                withAnimation(.spring(response: 0.3)) {
-                                    selectedCity = city
-                                    showComplaintSheet = true
-                                }
-                                haptic(.light)
-                            }
+                        CityMarkerButton(city: city) {
+                            selectedCity = city
+                        }
                     }
                 }
             }
@@ -113,36 +110,34 @@ struct MapView: View {
     
     // MARK: - Map Controls
     private func zoomIn() {
-        let newSpan = MKCoordinateSpan(
-            latitudeDelta: max(currentRegion.span.latitudeDelta / 2, 0.5),
-            longitudeDelta: max(currentRegion.span.longitudeDelta / 2, 0.5)
-        )
-        currentRegion = MKCoordinateRegion(center: currentRegion.center, span: newSpan)
+        zoomLevel = max(zoomLevel / 2, 0.5)
         withAnimation(.easeInOut(duration: 0.3)) {
-            mapCameraPosition = .region(currentRegion)
+            mapCameraPosition = .region(MKCoordinateRegion(
+                center: mapCenter,
+                span: MKCoordinateSpan(latitudeDelta: zoomLevel, longitudeDelta: zoomLevel)
+            ))
         }
         haptic(.light)
     }
     
     private func zoomOut() {
-        let newSpan = MKCoordinateSpan(
-            latitudeDelta: min(currentRegion.span.latitudeDelta * 2, 60),
-            longitudeDelta: min(currentRegion.span.longitudeDelta * 2, 60)
-        )
-        currentRegion = MKCoordinateRegion(center: currentRegion.center, span: newSpan)
+        zoomLevel = min(zoomLevel * 2, 60)
         withAnimation(.easeInOut(duration: 0.3)) {
-            mapCameraPosition = .region(currentRegion)
+            mapCameraPosition = .region(MKCoordinateRegion(
+                center: mapCenter,
+                span: MKCoordinateSpan(latitudeDelta: zoomLevel, longitudeDelta: zoomLevel)
+            ))
         }
         haptic(.light)
     }
     
     private func resetMapPosition() {
-        currentRegion = MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
-            span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
-        )
+        zoomLevel = 30
         withAnimation(.easeInOut(duration: 0.5)) {
-            mapCameraPosition = .region(currentRegion)
+            mapCameraPosition = .region(MKCoordinateRegion(
+                center: mapCenter,
+                span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
+            ))
         }
         haptic(.medium)
     }
@@ -229,42 +224,49 @@ struct MapView: View {
     }
 }
 
-// MARK: - City Marker
-struct CityMarker: View {
+// MARK: - City Marker Button (解决点击问题)
+struct CityMarkerButton: View {
     let city: CityStats
+    let onTap: () -> Void
     
     @State private var isAnimating: Bool = false
     
     var body: some View {
-        VStack(spacing: 4) {
-            // 状态指示器
-            ZStack {
-                // 脉冲动画
-                Circle()
-                    .fill(statusColor.opacity(0.3))
-                    .frame(width: isAnimating ? 50 : 30, height: isAnimating ? 50 : 30)
-                    .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
+        Button(action: {
+            haptic(.light)
+            onTap()
+        }) {
+            VStack(spacing: 4) {
+                // 状态指示器
+                ZStack {
+                    // 脉冲动画
+                    Circle()
+                        .fill(statusColor.opacity(0.3))
+                        .frame(width: isAnimating ? 50 : 30, height: isAnimating ? 50 : 30)
+                        .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
+                    
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 24, height: 24)
+                    
+                    Text("\(city.checkedIn)")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(.white)
+                }
                 
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 24, height: 24)
-                
-                Text("\(city.checkedIn)")
-                    .font(.system(size: 8, weight: .bold))
+                // 城市名称
+                Text(city.city)
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                    )
             }
-            
-            // 城市名称
-            Text(city.city)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.white)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule()
-                        .fill(.ultraThinMaterial)
-                )
         }
+        .buttonStyle(.plain)
         .onAppear {
             isAnimating = true
         }
@@ -365,9 +367,10 @@ struct ComplaintCard: View {
 struct CityDetailSheet: View {
     let city: CityStats
     let complaints: [Complaint]
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
                     // 城市统计
@@ -377,26 +380,32 @@ struct CityDetailSheet: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("本地抱怨")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                         
                         if complaints.isEmpty {
                             Text("这个城市的牛马还没开始骂街")
                                 .font(.system(size: 14))
-                                .foregroundColor(.gray)
+                                .foregroundColor(.secondary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 40)
                         } else {
                             ForEach(complaints) { complaint in
-                                ComplaintCard(complaint: complaint)
+                                SimpleComplaintCard(complaint: complaint)
                             }
                         }
                     }
                 }
                 .padding(20)
             }
-            .background(Color.darkBg)
             .navigationTitle(city.city)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") {
+                        dismiss()
+                    }
+                }
+            }
         }
     }
     
@@ -416,20 +425,20 @@ struct CityDetailSheet: View {
                 
                 Text("下班率 \(Int(city.checkInRate * 100))%")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.primary)
             }
             
             // 进度条
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.cardBg)
+                        .fill(Color.secondary.opacity(0.2))
                         .frame(height: 12)
                     
                     RoundedRectangle(cornerRadius: 6)
                         .fill(
                             LinearGradient(
-                                colors: [.aliveGreen, Color(hex: "2ECC71")],
+                                colors: [.green, Color(hex: "2ECC71")],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
@@ -441,21 +450,22 @@ struct CityDetailSheet: View {
             
             // 数据
             HStack {
-                statItem(value: city.checkedIn, label: "已下班", color: .aliveGreen)
+                statItem(value: city.checkedIn, label: "已下班", color: .green)
                 Spacer()
-                statItem(value: city.stillWorking, label: "还在苦", color: .deadRed)
+                statItem(value: city.stillWorking, label: "还在苦", color: .red)
                 Spacer()
-                statItem(value: city.totalWorkers, label: "总人数", color: .gray)
+                statItem(value: city.totalWorkers, label: "总人数", color: .secondary)
             }
             
             if let avgTime = city.averageCheckOutTime {
                 Text("平均下班时间：\(avgTime)")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.gray)
+                    .foregroundColor(.secondary)
             }
         }
         .padding(16)
-        .glassCard()
+        .background(Color.secondary.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
     
     private func statItem(value: Int, label: String, color: Color) -> some View {
@@ -465,8 +475,52 @@ struct CityDetailSheet: View {
                 .foregroundColor(color)
             Text(label)
                 .font(.system(size: 12))
-                .foregroundColor(.gray)
+                .foregroundColor(.secondary)
         }
+    }
+}
+
+// MARK: - Simple Complaint Card (用于 Sheet)
+struct SimpleComplaintCard: View {
+    let complaint: Complaint
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(complaint.userEmoji)
+                .font(.system(size: 24))
+                .frame(width: 40, height: 40)
+                .background(Color.secondary.opacity(0.1))
+                .clipShape(Circle())
+            
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    if let location = complaint.location {
+                        Text(location.district ?? "")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+                
+                Text(complaint.content)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.primary)
+                    .lineLimit(3)
+                
+                HStack(spacing: 16) {
+                    Label("\(complaint.likes)", systemImage: "hand.thumbsup.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                    
+                    Label("\(complaint.comments)", systemImage: "bubble.left.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -476,4 +530,3 @@ struct MapView_Previews: PreviewProvider {
         MapView()
     }
 }
-
