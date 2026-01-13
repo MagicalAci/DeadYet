@@ -33,12 +33,9 @@ extension Color {
 }
 
 // MARK: - Theme Colors
+// 注意: deadRed, aliveGreen 由 Colors.xcassets 自动生成，无需手动定义
 extension Color {
-    // 主色调 - 从 Assets 引用或回退到 hex 定义
-    static let deadRed = Color("DeadRed", bundle: nil)
-    static let aliveGreen = Color("AliveGreen", bundle: nil)
-    
-    // 额外颜色
+    // 额外颜色 (Assets 中未定义的)
     static let struggleYellow = Color(hex: "FFCC00") // 警示黄、挣扎中
     static let darkBg = Color(hex: "1C1C1E")       // 背景黑
     static let cardBg = Color(hex: "2C2C2E")       // 卡片背景
