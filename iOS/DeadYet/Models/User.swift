@@ -142,6 +142,11 @@ struct Complaint: Codable, Identifiable {
     var isAnonymous: Bool = true
     var category: Category = .general
     
+    // 语音相关
+    var isVoice: Bool = false           // 是否是语音消息
+    var voiceDuration: Int = 0          // 语音时长（秒）
+    var voiceTranscript: String?        // 语音转文字内容
+    
     enum Category: String, Codable, CaseIterable {
         case overtime = "加班"
         case boss = "领导"

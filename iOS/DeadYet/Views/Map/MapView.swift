@@ -462,6 +462,8 @@ struct CityMarkerView: View {
 // MARK: - Complaint Card View
 struct ComplaintCardView: View {
     let complaint: Complaint
+    @State private var isPlaying: Bool = false
+    @State private var playProgress: CGFloat = 0
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -475,15 +477,16 @@ struct ComplaintCardView: View {
             VStack(alignment: .leading, spacing: 6) {
                 // 头部信息
                 HStack {
+                    // 昵称
+                    Text(complaint.userNickname ?? "匿名牛马")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                    
                     // 位置
                     if let location = complaint.location {
-                        HStack(spacing: 4) {
-                            Image(systemName: "location.fill")
-                                .font(.system(size: 9))
-                            Text("\(location.city ?? "")·\(location.district ?? "")")
-                        }
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundColor(.gray)
+                        Text("· \(location.city ?? "")")
+                            .font(.system(size: 11))
+                            .foregroundColor(.gray)
                     }
                     
                     Spacer()
@@ -494,19 +497,30 @@ struct ComplaintCardView: View {
                         .foregroundColor(.gray.opacity(0.7))
                 }
                 
-                // 内容
-                Text(complaint.content)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
-                    .lineLimit(2)
-                    .lineSpacing(2)
+                // 内容 - 区分语音和文字
+                if complaint.isVoice {
+                    // 语音条
+                    VoiceMessageBar(
+                        duration: complaint.voiceDuration,
+                        transcript: complaint.voiceTranscript,
+                        isPlaying: $isPlaying,
+                        playProgress: $playProgress
+                    )
+                } else {
+                    // 文字内容
+                    Text(complaint.content)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                        .lineSpacing(2)
+                }
                 
                 // 底部信息
                 HStack(spacing: 16) {
                     // 点赞
                     HStack(spacing: 4) {
                         Image(systemName: "hand.thumbsup.fill")
-                        Text("\(complaint.likes)")
+                        Text(formatNumber(complaint.likes))
                     }
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
@@ -514,14 +528,14 @@ struct ComplaintCardView: View {
                     // 评论
                     HStack(spacing: 4) {
                         Image(systemName: "bubble.left.fill")
-                        Text("\(complaint.comments)")
+                        Text(formatNumber(complaint.comments))
                     }
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
                     
                     Spacer()
                     
-                    // 分类
+                    // 分类标签
                     Text("\(complaint.category.emoji) \(complaint.category.rawValue)")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(.deadRed)
@@ -543,6 +557,192 @@ struct ComplaintCardView: View {
         else if seconds < 3600 { return "\(seconds / 60)分钟前" }
         else if seconds < 86400 { return "\(seconds / 3600)小时前" }
         else { return "\(seconds / 86400)天前" }
+    }
+    
+    private func formatNumber(_ num: Int) -> String {
+        if num >= 10000 {
+            return String(format: "%.1fw", Double(num) / 10000)
+        } else if num >= 1000 {
+            return String(format: "%.1fk", Double(num) / 1000)
+        }
+        return "\(num)"
+    }
+}
+
+// MARK: - Voice Message Bar (语音条)
+struct VoiceMessageBar: View {
+    let duration: Int
+    let transcript: String?
+    @Binding var isPlaying: Bool
+    @Binding var playProgress: CGFloat
+    
+    @State private var showTranscript: Bool = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // 语音条主体
+            Button {
+                togglePlay()
+            } label: {
+                HStack(spacing: 10) {
+                    // 播放按钮
+                    ZStack {
+                        Circle()
+                            .fill(Color.deadRed)
+                            .frame(width: 32, height: 32)
+                        
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                            .offset(x: isPlaying ? 0 : 1)
+                    }
+                    
+                    // 波形动画
+                    HStack(spacing: 2) {
+                        ForEach(0..<20, id: \.self) { index in
+                            VoiceWaveBar(
+                                index: index,
+                                isPlaying: isPlaying,
+                                progress: playProgress,
+                                totalBars: 20
+                            )
+                        }
+                    }
+                    .frame(height: 24)
+                    
+                    Spacer()
+                    
+                    // 时长
+                    Text("\(duration)\"")
+                        .font(.system(size: 13, weight: .medium, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    LinearGradient(
+                        colors: [Color.deadRed.opacity(0.2), Color.deadRed.opacity(0.1)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.deadRed.opacity(0.3), lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            
+            // 转文字内容（可展开）
+            if let transcript = transcript {
+                Button {
+                    withAnimation(.spring(response: 0.3)) {
+                        showTranscript.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "text.bubble")
+                            .font(.system(size: 10))
+                        Text(showTranscript ? "收起文字" : "查看文字")
+                            .font(.system(size: 11))
+                        Image(systemName: showTranscript ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9))
+                    }
+                    .foregroundColor(.gray)
+                }
+                .buttonStyle(.plain)
+                
+                if showTranscript {
+                    Text(transcript)
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(3)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .background(Color.white.opacity(0.05))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
+            }
+        }
+    }
+    
+    private func togglePlay() {
+        haptic(.light)
+        
+        if isPlaying {
+            isPlaying = false
+            playProgress = 0
+        } else {
+            isPlaying = true
+            // 模拟播放进度
+            simulatePlayback()
+        }
+    }
+    
+    private func simulatePlayback() {
+        playProgress = 0
+        let steps = 50
+        let interval = Double(duration) / Double(steps)
+        
+        for i in 0...steps {
+            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(i)) {
+                if isPlaying {
+                    playProgress = CGFloat(i) / CGFloat(steps)
+                    if i == steps {
+                        isPlaying = false
+                        playProgress = 0
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Voice Wave Bar (单个波形条)
+struct VoiceWaveBar: View {
+    let index: Int
+    let isPlaying: Bool
+    let progress: CGFloat
+    let totalBars: Int
+    
+    @State private var animatedHeight: CGFloat = 0.3
+    
+    // 预设波形高度
+    private var baseHeight: CGFloat {
+        let heights: [CGFloat] = [0.3, 0.5, 0.7, 0.4, 0.9, 0.6, 0.8, 0.5, 0.7, 0.4,
+                                   0.6, 0.9, 0.5, 0.7, 0.4, 0.8, 0.6, 0.5, 0.7, 0.4]
+        return heights[index % heights.count]
+    }
+    
+    private var isPassed: Bool {
+        CGFloat(index) / CGFloat(totalBars) <= progress
+    }
+    
+    var body: some View {
+        RoundedRectangle(cornerRadius: 1.5)
+            .fill(isPassed ? Color.deadRed : Color.white.opacity(0.3))
+            .frame(width: 3, height: 24 * (isPlaying ? animatedHeight : baseHeight))
+            .animation(.easeInOut(duration: 0.2), value: isPassed)
+            .onChange(of: isPlaying) { _, playing in
+                if playing {
+                    startWaveAnimation()
+                } else {
+                    animatedHeight = baseHeight
+                }
+            }
+            .onAppear {
+                animatedHeight = baseHeight
+            }
+    }
+    
+    private func startWaveAnimation() {
+        let delay = Double(index) * 0.05
+        
+        withAnimation(.easeInOut(duration: 0.3).repeatForever(autoreverses: true).delay(delay)) {
+            animatedHeight = CGFloat.random(in: 0.3...1.0)
+        }
     }
 }
 
@@ -716,6 +916,8 @@ struct CityDetailSheet: View {
 // MARK: - Simple Complaint Card
 struct SimpleComplaintCard: View {
     let complaint: Complaint
+    @State private var isPlaying: Bool = false
+    @State private var playProgress: CGFloat = 0
     
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -726,10 +928,16 @@ struct SimpleComplaintCard: View {
                 .clipShape(Circle())
             
             VStack(alignment: .leading, spacing: 6) {
-                Text(complaint.content)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white)
-                    .lineLimit(2)
+                // 区分语音和文字
+                if complaint.isVoice {
+                    // 简化版语音条
+                    SimpleVoiceBar(duration: complaint.voiceDuration, transcript: complaint.voiceTranscript)
+                } else {
+                    Text(complaint.content)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                }
                 
                 HStack(spacing: 12) {
                     Label("\(complaint.likes)", systemImage: "hand.thumbsup.fill")
@@ -742,6 +950,47 @@ struct SimpleComplaintCard: View {
         .padding(12)
         .background(Color(hex: "3C3C3E"))
         .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+// MARK: - Simple Voice Bar (简化版语音条)
+struct SimpleVoiceBar: View {
+    let duration: Int
+    let transcript: String?
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.deadRed)
+                
+                // 简化波形
+                HStack(spacing: 2) {
+                    ForEach(0..<10, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Color.deadRed.opacity(0.6))
+                            .frame(width: 2, height: CGFloat.random(in: 4...14))
+                    }
+                }
+                
+                Text("\(duration)\"")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.deadRed.opacity(0.15))
+            .clipShape(Capsule())
+            
+            // 转文字预览
+            if let transcript = transcript {
+                Text(transcript)
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                    .lineLimit(1)
+            }
+        }
     }
 }
 
