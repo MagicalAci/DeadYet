@@ -82,8 +82,8 @@ app.onError((err, c) => {
   }, 500)
 })
 
-// 启动服务器
-const port = parseInt(process.env.PORT || '3000')
+// 启动服务器 - Zeabur 默认使用 8080 端口
+const port = parseInt(process.env.PORT || '8080')
 
 console.log(`
 ╔══════════════════════════════════════════╗
@@ -101,5 +101,6 @@ console.log(`
 serve({
   fetch: app.fetch,
   port,
+  hostname: '0.0.0.0', // 允许外部访问
 })
 
