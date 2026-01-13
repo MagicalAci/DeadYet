@@ -11,7 +11,6 @@ import CoreLocation
 struct PermissionsView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var locationService = LocationService()
-    @StateObject private var notificationService = NotificationService.shared
     
     @State private var locationGranted: Bool = false
     @State private var notificationGranted: Bool = false
@@ -298,15 +297,21 @@ struct PermissionsView: View {
         haptic(.light)
         
         Task {
-            let granted = await notificationService.requestPermission()
-            await MainActor.run {
-                withAnimation(.spring(response: 0.3)) {
-                    notificationGranted = granted
-                    isRequestingNotification = false
+            do {
+                let granted = try await NotificationService.shared.requestAuthorization()
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.3)) {
+                        notificationGranted = granted
+                        isRequestingNotification = false
+                    }
+                    
+                    if granted {
+                        haptic(.success)
+                    }
                 }
-                
-                if granted {
-                    haptic(.success)
+            } catch {
+                await MainActor.run {
+                    isRequestingNotification = false
                 }
             }
         }

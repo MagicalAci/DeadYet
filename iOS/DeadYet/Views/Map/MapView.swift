@@ -13,10 +13,13 @@ struct MapView: View {
     @State private var cityStats: [CityStats] = []
     @State private var complaints: [Complaint] = []
     @State private var selectedCity: CityStats?
+    @State private var hasSetInitialPosition: Bool = false
+    
+    // 默认显示用户位置，如果没有权限则显示北京
     @State private var mapCameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
-            span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
+            center: CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074), // 北京
+            span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5) // 城市级别缩放
         )
     )
     
@@ -33,11 +36,37 @@ struct MapView: View {
         }
         .onAppear {
             loadMockData()
+            setupInitialLocation()
+        }
+        .onChange(of: locationService.currentLocation) { _, newLocation in
+            // 当获取到用户位置时，首次定位到用户位置
+            if let location = newLocation, !hasSetInitialPosition {
+                hasSetInitialPosition = true
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    mapCameraPosition = .region(
+                        MKCoordinateRegion(
+                            center: location.coordinate,
+                            span: MKCoordinateSpan(latitudeDelta: 0.3, longitudeDelta: 0.3)
+                        )
+                    )
+                }
+            }
         }
         .sheet(item: $selectedCity) { city in
             CityDetailSheet(city: city, complaints: complaints.filter { $0.location?.city == city.city })
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+    }
+    
+    // MARK: - Setup Initial Location
+    private func setupInitialLocation() {
+        // 请求位置权限并开始更新
+        if locationService.authorizationStatus == .authorizedWhenInUse ||
+           locationService.authorizationStatus == .authorizedAlways {
+            locationService.startUpdatingLocation()
+        } else if locationService.authorizationStatus == .notDetermined {
+            locationService.requestPermission()
         }
     }
     
