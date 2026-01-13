@@ -496,8 +496,8 @@ class MapViewModel: ObservableObject {
         )
     )
     
-    // 数据提供者
-    let dataProvider: MapDataProvider = MockMapDataProvider.shared
+    // 数据提供者（使用真实 API，Mock 作为 fallback）
+    let dataProvider: MapDataProvider = APIMapDataProvider.shared
     
     // 显示统计
     var displayStats: (checkedIn: Int, stillWorking: Int) {
@@ -543,7 +543,7 @@ class MapViewModel: ObservableObject {
     }
     
     func refreshComplaints() async {
-        // 刷新缓存
+        // 刷新缓存（如果使用 Mock 数据）
         MockMapDataProvider.shared.refreshData()
         
         do {

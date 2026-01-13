@@ -220,7 +220,293 @@ protocol MapDataProvider {
     func fetchNearbyComplaints(latitude: Double, longitude: Double, radiusKm: Double) async throws -> [ComplaintData]
 }
 
-// MARK: - Mock 数据提供者
+// MARK: - API 数据提供者（调用真实后端）
+class APIMapDataProvider: MapDataProvider {
+    static let shared = APIMapDataProvider()
+    
+    private let baseURL: String
+    private let session: URLSession
+    
+    // Mock 作为 fallback
+    private let mockProvider = MockMapDataProvider()
+    
+    init() {
+        self.baseURL = ProcessInfo.processInfo.environment["API_URL"] ?? "https://deadyet.zeabur.app"
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        self.session = URLSession(configuration: config)
+    }
+    
+    // MARK: - 城市数据（从后端获取）
+    func fetchAllCities() async throws -> [CityData] {
+        do {
+            guard let url = URL(string: "\(baseURL)/api/map/stats") else {
+                return try await mockProvider.fetchAllCities()
+            }
+            
+            let (data, response) = try await session.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                print("⚠️ API 返回非 200，使用 Mock 数据")
+                return try await mockProvider.fetchAllCities()
+            }
+            
+            let decoder = JSONDecoder()
+            let apiResponse = try decoder.decode(MapStatsAPIResponse.self, from: data)
+            
+            if apiResponse.success, !apiResponse.cities.isEmpty {
+                print("✅ 从 API 获取到 \(apiResponse.cities.count) 个城市")
+                return apiResponse.cities.map { $0.toCityData() }
+            } else {
+                print("⚠️ API 返回空数据，使用 Mock 数据")
+                return try await mockProvider.fetchAllCities()
+            }
+        } catch {
+            print("⚠️ API 调用失败: \(error)，使用 Mock 数据")
+            return try await mockProvider.fetchAllCities()
+        }
+    }
+    
+    func fetchCityDetail(city: String) async throws -> CityData? {
+        let cities = try await fetchAllCities()
+        return cities.first { $0.city == city }
+    }
+    
+    // MARK: - 区级数据（从后端获取）
+    func fetchDistricts(city: String) async throws -> [DistrictData] {
+        do {
+            guard let url = URL(string: "\(baseURL)/api/map/cities/\(city.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? city)/districts") else {
+                return try await mockProvider.fetchDistricts(city: city)
+            }
+            
+            let (data, response) = try await session.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return try await mockProvider.fetchDistricts(city: city)
+            }
+            
+            let decoder = JSONDecoder()
+            let apiResponse = try decoder.decode(DistrictsAPIResponse.self, from: data)
+            
+            if apiResponse.success, !apiResponse.data.isEmpty {
+                print("✅ 从 API 获取到 \(city) 的 \(apiResponse.data.count) 个区域")
+                return apiResponse.data.map { $0.toDistrictData() }
+            } else {
+                return try await mockProvider.fetchDistricts(city: city)
+            }
+        } catch {
+            print("⚠️ 获取区域失败: \(error)，使用 Mock")
+            return try await mockProvider.fetchDistricts(city: city)
+        }
+    }
+    
+    // MARK: - 热门地点
+    func fetchHotSpots(city: String, district: String?) async throws -> [HotSpot] {
+        do {
+            var urlString = "\(baseURL)/api/map/cities/\(city.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? city)/hotspots"
+            if let district = district {
+                urlString += "?district=\(district.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? district)"
+            }
+            
+            guard let url = URL(string: urlString) else {
+                return try await mockProvider.fetchHotSpots(city: city, district: district)
+            }
+            
+            let (data, response) = try await session.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return try await mockProvider.fetchHotSpots(city: city, district: district)
+            }
+            
+            let decoder = JSONDecoder()
+            let apiResponse = try decoder.decode(HotSpotsAPIResponse.self, from: data)
+            
+            if apiResponse.success, !apiResponse.data.isEmpty {
+                print("✅ 从 API 获取到 \(city) 的 \(apiResponse.data.count) 个热门地点")
+                return apiResponse.data.map { $0.toHotSpot() }
+            } else {
+                return try await mockProvider.fetchHotSpots(city: city, district: district)
+            }
+        } catch {
+            print("⚠️ 获取热门地点失败: \(error)，使用 Mock")
+            return try await mockProvider.fetchHotSpots(city: city, district: district)
+        }
+    }
+    
+    // MARK: - 抱怨数据
+    func fetchComplaints(city: String?, district: String?, limit: Int) async throws -> [ComplaintData] {
+        do {
+            var urlComponents = URLComponents(string: "\(baseURL)/api/complaints")!
+            var queryItems: [URLQueryItem] = [URLQueryItem(name: "limit", value: "\(limit)")]
+            if let city = city {
+                queryItems.append(URLQueryItem(name: "city", value: city))
+            }
+            urlComponents.queryItems = queryItems
+            
+            guard let url = urlComponents.url else {
+                return try await mockProvider.fetchComplaints(city: city, district: district, limit: limit)
+            }
+            
+            let (data, response) = try await session.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return try await mockProvider.fetchComplaints(city: city, district: district, limit: limit)
+            }
+            
+            let decoder = JSONDecoder()
+            let apiResponse = try decoder.decode(ComplaintsAPIResponse.self, from: data)
+            
+            if apiResponse.success, !apiResponse.complaints.isEmpty {
+                print("✅ 从 API 获取到 \(apiResponse.complaints.count) 条抱怨")
+                return apiResponse.complaints.map { $0.toComplaintData() }
+            } else {
+                return try await mockProvider.fetchComplaints(city: city, district: district, limit: limit)
+            }
+        } catch {
+            print("⚠️ 获取抱怨失败: \(error)，使用 Mock")
+            return try await mockProvider.fetchComplaints(city: city, district: district, limit: limit)
+        }
+    }
+    
+    func fetchNearbyComplaints(latitude: Double, longitude: Double, radiusKm: Double) async throws -> [ComplaintData] {
+        // 使用 Mock 数据，真正的附近抱怨需要更精确的 API
+        return try await mockProvider.fetchNearbyComplaints(latitude: latitude, longitude: longitude, radiusKm: radiusKm)
+    }
+}
+
+// MARK: - API 响应模型
+private struct MapStatsAPIResponse: Decodable {
+    let success: Bool
+    let cities: [CityDTO]
+    
+    struct CityDTO: Decodable {
+        let city: String
+        let name: String?
+        let province: String?
+        let tier: Int?
+        let latitude: Double
+        let longitude: Double
+        let totalWorkers: Int
+        let checkedIn: Int
+        let stillWorking: Int
+        let averageCheckOutTime: String?
+        let status: String?
+        
+        func toCityData() -> CityData {
+            CityData(
+                city: city,
+                province: province ?? "",
+                tier: tier ?? 3,
+                latitude: latitude,
+                longitude: longitude,
+                totalWorkers: totalWorkers,
+                checkedIn: checkedIn,
+                stillWorking: stillWorking,
+                averageCheckOutTime: averageCheckOutTime
+            )
+        }
+    }
+}
+
+private struct DistrictsAPIResponse: Decodable {
+    let success: Bool
+    let data: [DistrictDTO]
+    
+    struct DistrictDTO: Decodable {
+        let city: String
+        let name: String?
+        let district: String?
+        let latitude: Double
+        let longitude: Double
+        let totalWorkers: Int
+        let checkedIn: Int
+        let stillWorking: Int
+        let averageCheckOutTime: String?
+        
+        func toDistrictData() -> DistrictData {
+            DistrictData(
+                city: city,
+                district: name ?? district ?? "",
+                latitude: latitude,
+                longitude: longitude,
+                totalWorkers: totalWorkers,
+                checkedIn: checkedIn,
+                stillWorking: stillWorking,
+                averageCheckOutTime: averageCheckOutTime
+            )
+        }
+    }
+}
+
+private struct HotSpotsAPIResponse: Decodable {
+    let success: Bool
+    let data: [HotSpotDTO]
+    
+    struct HotSpotDTO: Decodable {
+        let name: String
+        let type: String
+        let city: String
+        let district: String
+        let latitude: Double
+        let longitude: Double
+        let totalWorkers: Int
+        let checkedIn: Int
+        let stillWorking: Int
+        let averageCheckOutTime: String?
+        let tags: [String]?
+        
+        func toHotSpot() -> HotSpot {
+            HotSpot(
+                name: name,
+                type: type,
+                city: city,
+                district: district,
+                latitude: latitude,
+                longitude: longitude,
+                totalWorkers: totalWorkers,
+                checkedIn: checkedIn,
+                stillWorking: stillWorking,
+                tags: tags ?? []
+            )
+        }
+    }
+}
+
+private struct ComplaintsAPIResponse: Decodable {
+    let success: Bool
+    let complaints: [ComplaintDTO]
+    
+    struct ComplaintDTO: Decodable {
+        let id: String
+        let userEmoji: String
+        let userNickname: String?
+        let content: String
+        let category: String
+        let city: String?
+        let district: String?
+        let likes: Int
+        let createdAt: String?
+        
+        func toComplaintData() -> ComplaintData {
+            var complaint = ComplaintData()
+            complaint.id = id
+            complaint.content = content
+            complaint.category = category
+            complaint.city = city ?? ""
+            complaint.district = district ?? ""
+            complaint.userNickname = userNickname ?? "匿名牛马"
+            complaint.userEmoji = userEmoji
+            complaint.likes = likes
+            return complaint
+        }
+    }
+}
+
+// MARK: - Mock 数据提供者（作为 fallback 使用）
 class MockMapDataProvider: MapDataProvider {
     static let shared = MockMapDataProvider()
     
