@@ -3,6 +3,7 @@
 //  DeadYet - 还没死？
 //
 //  数据仓库层 - 统一数据访问
+//  使用 MapModels.swift 中定义的类型
 //
 
 import Foundation
@@ -11,8 +12,8 @@ import CoreLocation
 // MARK: - ==================== API 客户端 ====================
 
 @MainActor
-class APIClient {
-    static let shared = APIClient()
+class APIClient2 {
+    static let shared = APIClient2()
     
     private let session: URLSession
     private let baseURL: String
@@ -130,11 +131,11 @@ struct CheckInRecordDTO: Decodable {
 
 struct ComplaintsResponseDTO: Decodable {
     let success: Bool
-    let complaints: [ComplaintDTO]?
+    let complaints: [ComplaintDTOResponse]?
     let total: Int?
 }
 
-struct ComplaintDTO: Decodable {
+struct ComplaintDTOResponse: Decodable {
     let id: String
     let userNickname: String?
     let userEmoji: String?
@@ -154,10 +155,10 @@ struct ComplaintDTO: Decodable {
 
 struct MapStatsResponseDTO: Decodable {
     let success: Bool
-    let cities: [CityDTO]?
+    let cities: [CityDTOResponse]?
 }
 
-struct CityDTO: Decodable {
+struct CityDTOResponse: Decodable {
     let id: String?
     let name: String?
     let city: String?
@@ -171,7 +172,7 @@ struct CityDTO: Decodable {
     let averageCheckOutTime: String?
 }
 
-struct DistrictDTO: Decodable {
+struct DistrictDTOResponse: Decodable {
     let id: String?
     let city: String?
     let name: String?
@@ -183,7 +184,7 @@ struct DistrictDTO: Decodable {
     let stillWorking: Int?
 }
 
-struct HotSpotDTO: Decodable {
+struct HotSpotDTOResponse: Decodable {
     let id: String?
     let name: String?
     let type: String?
@@ -203,17 +204,17 @@ struct HotSpotDTO: Decodable {
 class UserRepository: ObservableObject {
     static let shared = UserRepository()
     
-    private let api = APIClient.shared
+    private let api = APIClient2.shared
     private let storage = StorageManager.shared
     
-    @Published private(set) var currentUser: User?
+    @Published private(set) var currentUser: UserProfile?
     @Published private(set) var isLoading = false
     
     private init() {
-        currentUser = storage.get(User.self, forKey: StorageKeys.currentUser)
+        currentUser = storage.get(UserProfile.self, forKey: StorageKeys.currentUser)
     }
     
-    func login(email: String) async throws -> User {
+    func login(email: String) async throws -> UserProfile {
         guard isValidEmail(email) else {
             throw AppError.auth(.invalidEmail)
         }
@@ -225,10 +226,12 @@ class UserRepository: ObservableObject {
         if AppConfig.shared.enableMockData {
             try await Task.sleep(nanoseconds: 500_000_000)
             
-            var user = User(email: email)
-            user.survivalDays = 1
-            user.city = "北京"
-            user.district = "海淀区"
+            let user = UserProfile(
+                email: email,
+                survivalDays: 1,
+                city: "北京",
+                district: "海淀区"
+            )
             
             storage.set(user, forKey: StorageKeys.currentUser)
             currentUser = user
@@ -246,7 +249,7 @@ class UserRepository: ObservableObject {
             throw AppError.auth(.invalidCredentials)
         }
         
-        let user = User(
+        let user = UserProfile(
             id: dto.id,
             email: dto.email,
             nickname: dto.nickname,
@@ -269,7 +272,7 @@ class UserRepository: ObservableObject {
         return user
     }
     
-    func checkIn(complaint: String?, mood: CheckInRecord.Mood, city: String?, district: String?) async throws -> CheckInRecord {
+    func checkIn(complaint: String?, mood: CheckInRecordData.Mood, city: String?, district: String?) async throws -> CheckInRecordData {
         guard var user = currentUser else {
             throw AppError.auth(.notLoggedIn)
         }
@@ -285,15 +288,24 @@ class UserRepository: ObservableObject {
         if AppConfig.shared.enableMockData {
             try await Task.sleep(nanoseconds: 300_000_000)
             
-            var record = CheckInRecord(userId: user.id, complaint: complaint, mood: mood)
+            var record = CheckInRecordData(userId: user.id, complaint: complaint, mood: mood)
             record.aiResponse = generateMockAIResponse(for: complaint)
             record.bannerGenerated = true
             
-            user.survivalDays += 1
-            user.totalCheckIns += 1
-            user.currentStreak += 1
-            user.longestStreak = max(user.longestStreak, user.currentStreak)
-            user.lastCheckIn = Date()
+            user = UserProfile(
+                id: user.id,
+                email: user.email,
+                nickname: user.nickname,
+                avatarEmoji: user.avatarEmoji,
+                survivalDays: user.survivalDays + 1,
+                totalCheckIns: user.totalCheckIns + 1,
+                currentStreak: user.currentStreak + 1,
+                longestStreak: max(user.longestStreak, user.currentStreak + 1),
+                city: user.city,
+                district: user.district,
+                createdAt: user.createdAt,
+                lastCheckIn: Date()
+            )
             
             storage.set(user, forKey: StorageKeys.currentUser)
             storage.lastCheckInDate = Date()
@@ -321,21 +333,30 @@ class UserRepository: ObservableObject {
             throw AppError.business(.checkInFailed)
         }
         
-        var record = CheckInRecord(
+        let record = CheckInRecordData(
             id: dto.id,
             userId: user.id,
             checkInTime: dto.checkInTime.toDate() ?? Date(),
             complaint: dto.complaint,
             aiResponse: response.aiResponse ?? dto.aiResponse,
-            mood: CheckInRecord.Mood(rawValue: dto.mood ?? "") ?? .neutral,
+            mood: CheckInRecordData.Mood(rawValue: dto.mood ?? "") ?? .neutral,
             bannerGenerated: dto.bannerGenerated ?? false
         )
         
-        user.survivalDays = response.survivalDays ?? (user.survivalDays + 1)
-        user.totalCheckIns += 1
-        user.currentStreak += 1
-        user.longestStreak = max(user.longestStreak, user.currentStreak)
-        user.lastCheckIn = Date()
+        user = UserProfile(
+            id: user.id,
+            email: user.email,
+            nickname: user.nickname,
+            avatarEmoji: user.avatarEmoji,
+            survivalDays: response.survivalDays ?? (user.survivalDays + 1),
+            totalCheckIns: user.totalCheckIns + 1,
+            currentStreak: user.currentStreak + 1,
+            longestStreak: max(user.longestStreak, user.currentStreak + 1),
+            city: user.city,
+            district: user.district,
+            createdAt: user.createdAt,
+            lastCheckIn: Date()
+        )
         
         storage.set(user, forKey: StorageKeys.currentUser)
         storage.lastCheckInDate = Date()
@@ -376,22 +397,22 @@ class UserRepository: ObservableObject {
 // MARK: - ==================== 地图仓库 ====================
 
 @MainActor
-class MapRepository: ObservableObject {
-    static let shared = MapRepository()
+class MapRepository2: ObservableObject {
+    static let shared = MapRepository2()
     
-    private let api = APIClient.shared
+    private let api = APIClient2.shared
     private let cache = CacheManager.shared
     
     private init() {}
     
-    func fetchAllCities() async throws -> [City] {
-        if let cached = cache.get([City].self, forKey: "cities", maxAge: 300) {
+    func fetchAllCities() async throws -> [CityData] {
+        if let cached = cache.get([CityData].self, forKey: "cities", maxAge: 300) {
             return cached
         }
         
         if AppConfig.shared.enableMockData {
             try await Task.sleep(nanoseconds: 200_000_000)
-            let cities = MockMapData.generateCities()
+            let cities = MockMapDataProvider.generateCityData()
             cache.set(cities, forKey: "cities")
             return cities
         }
@@ -402,8 +423,8 @@ class MapRepository: ObservableObject {
         )
         
         let cities = response.cities?.map { dto in
-            City(
-                name: dto.name ?? dto.city ?? "",
+            CityData(
+                city: dto.name ?? dto.city ?? "",
                 province: dto.province ?? "",
                 tier: dto.tier ?? 3,
                 latitude: dto.latitude ?? 0,
@@ -419,27 +440,27 @@ class MapRepository: ObservableObject {
         return cities
     }
     
-    func fetchDistricts(city: String) async throws -> [District] {
+    func fetchDistricts(city: String) async throws -> [DistrictData] {
         let cacheKey = "districts_\(city)"
         
-        if let cached = cache.get([District].self, forKey: cacheKey, maxAge: 300) {
+        if let cached = cache.get([DistrictData].self, forKey: cacheKey, maxAge: 300) {
             return cached
         }
         
         if AppConfig.shared.enableMockData {
             try await Task.sleep(nanoseconds: 100_000_000)
-            let districts = MockMapData.generateDistricts(for: city)
+            let districts = MockMapDataProvider.generateDistrictData(for: city)
             cache.set(districts, forKey: cacheKey)
             return districts
         }
         
-        struct Response: Decodable { let data: [DistrictDTO]? }
+        struct Response: Decodable { let data: [DistrictDTOResponse]? }
         let response: Response = try await api.get(Response.self, path: APIEndpoints.mapDistricts(city))
         
         let districts = response.data?.map { dto in
-            District(
+            DistrictData(
                 city: dto.city ?? city,
-                name: dto.name ?? dto.district ?? "",
+                district: dto.name ?? dto.district ?? "",
                 latitude: dto.latitude ?? 0,
                 longitude: dto.longitude ?? 0,
                 totalWorkers: dto.totalWorkers ?? 0,
@@ -463,15 +484,12 @@ class MapRepository: ObservableObject {
         }
         
         if AppConfig.shared.enableMockData {
-            let hotSpots = MockMapData.generateHotSpots(city: city)
+            let hotSpots = MockMapDataProvider.generateHotSpots(city: city, district: district)
             cache.set(hotSpots, forKey: cacheKey)
-            if let district = district {
-                return hotSpots.filter { $0.district == district }
-            }
             return hotSpots
         }
         
-        struct Response: Decodable { let data: [HotSpotDTO]? }
+        struct Response: Decodable { let data: [HotSpotDTOResponse]? }
         let response: Response = try await api.get(Response.self, path: APIEndpoints.mapHotSpots(city))
         
         let hotSpots = response.data?.map { dto in
@@ -485,7 +503,7 @@ class MapRepository: ObservableObject {
                 totalWorkers: dto.totalWorkers ?? 0,
                 checkedIn: dto.checkedIn ?? 0,
                 stillWorking: dto.stillWorking ?? 0,
-                tags: dto.tags ?? []
+                tags: dto.tags
             )
         } ?? []
         
@@ -501,24 +519,24 @@ class MapRepository: ObservableObject {
 // MARK: - ==================== 抱怨仓库 ====================
 
 @MainActor
-class ComplaintRepository: ObservableObject {
-    static let shared = ComplaintRepository()
+class ComplaintRepository2: ObservableObject {
+    static let shared = ComplaintRepository2()
     
-    private let api = APIClient.shared
+    private let api = APIClient2.shared
     private let cache = CacheManager.shared
     
     private init() {}
     
-    func fetchComplaints(city: String?, district: String?, limit: Int = 50) async throws -> [Complaint] {
+    func fetchComplaints(city: String?, district: String?, limit: Int = 50) async throws -> [ComplaintData] {
         let cacheKey = city != nil ? "complaints_\(city!)" : "complaints"
         
-        if let cached = cache.get([Complaint].self, forKey: cacheKey, maxAge: 120) {
+        if let cached = cache.get([ComplaintData].self, forKey: cacheKey, maxAge: 120) {
             return cached
         }
         
         if AppConfig.shared.enableMockData {
             try await Task.sleep(nanoseconds: 200_000_000)
-            var complaints = MockComplaintData.generate()
+            var complaints = MockMapDataProvider.generateComplaints()
             if let city = city {
                 complaints = complaints.filter { $0.city == city }
             }
@@ -537,12 +555,11 @@ class ComplaintRepository: ObservableObject {
         )
         
         let complaints = response.complaints?.map { dto in
-            Complaint(
-                id: dto.id,
+            ComplaintData(
                 userId: "",
                 userNickname: dto.userNickname,
                 userEmoji: dto.userEmoji ?? "🐂",
-                contentType: Complaint.ContentType(rawValue: dto.contentType ?? "text") ?? .text,
+                contentType: ComplaintData.ContentType(rawValue: dto.contentType ?? "text") ?? .text,
                 content: dto.content,
                 voiceUrl: dto.voiceUrl,
                 voiceDuration: dto.voiceDuration ?? 0,
@@ -550,8 +567,8 @@ class ComplaintRepository: ObservableObject {
                 longitude: dto.longitude ?? 0,
                 city: dto.city,
                 district: dto.district,
-                category: Complaint.Category(rawValue: dto.category ?? "") ?? .general,
                 createdAt: dto.createdAt?.toDate() ?? Date(),
+                category: ComplaintData.Category(rawValue: dto.category ?? "") ?? .general,
                 likes: dto.likes ?? 0,
                 comments: dto.comments ?? 0
             )
@@ -573,8 +590,8 @@ class DependencyContainer: ObservableObject {
     static let shared = DependencyContainer()
     
     lazy var users = UserRepository.shared
-    lazy var map = MapRepository.shared
-    lazy var complaints = ComplaintRepository.shared
+    lazy var map = MapRepository2.shared
+    lazy var complaints = ComplaintRepository2.shared
     
     private init() {
         Logger.info("DependencyContainer 初始化")

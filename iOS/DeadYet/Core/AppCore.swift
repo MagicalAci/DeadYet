@@ -11,7 +11,7 @@ import SwiftUI
 
 // MARK: - ==================== 配置管理 ====================
 
-enum Environment: String {
+enum AppEnvironment: String {
     case development = "dev"
     case staging = "staging"
     case production = "prod"
@@ -29,9 +29,9 @@ struct AppConfig {
     static let shared = AppConfig()
     
     #if DEBUG
-    let environment: Environment = .development
+    let environment: AppEnvironment = .development
     #else
-    let environment: Environment = .production
+    let environment: AppEnvironment = .production
     #endif
     
     var apiBaseURL: String { environment.apiBaseURL }
