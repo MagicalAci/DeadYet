@@ -900,13 +900,27 @@ app.get('/file/:id', (c) => {
     })
   }
   
-  // 回退到内存
+  // 回退到内存缓存中的文件路径
   const file = uploadedFiles.get(id)
   if (!file) {
     return c.json({ success: false, message: '文件不存在' }, 404)
   }
   
-  return c.json({ success: false, message: '文件不存在' }, 404)
+  // 尝试从缓存记录的路径读取
+  if (existsSync(file.filePath)) {
+    const buffer = readFileSync(file.filePath)
+    const mimeType = file.filename.endsWith('.png') ? 'image/png' : 'image/jpeg'
+    
+    return new Response(buffer, {
+      headers: {
+        'Content-Type': mimeType,
+        'Content-Disposition': `inline; filename="${file.filename}"`
+      }
+    })
+  }
+  
+  // 内存有记录但文件已被删除
+  return c.json({ success: false, message: '文件已被删除' }, 404)
 })
 
 app.get('/spec', (c) => {
