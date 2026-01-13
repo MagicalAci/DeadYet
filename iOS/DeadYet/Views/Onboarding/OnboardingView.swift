@@ -9,6 +9,7 @@ struct OnboardingView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var userService: UserService
     
+    @State private var currentStep: OnboardingStep = .welcome
     @State private var email: String = ""
     @State private var isLoading: Bool = false
     @State private var showError: Bool = false
@@ -17,31 +18,28 @@ struct OnboardingView: View {
     
     @FocusState private var isEmailFocused: Bool
     
+    enum OnboardingStep {
+        case welcome
+        case permissions
+    }
+    
     var body: some View {
         ZStack {
             // 背景
             backgroundView
             
-            // 内容
-            VStack(spacing: 0) {
-                Spacer()
-                
-                // Logo和标题
-                headerSection
-                    .opacity(animationPhase >= 1 ? 1 : 0)
-                    .offset(y: animationPhase >= 1 ? 0 : 30)
-                
-                Spacer()
-                
-                // 邮箱输入
-                emailInputSection
-                    .opacity(animationPhase >= 2 ? 1 : 0)
-                    .offset(y: animationPhase >= 2 ? 0 : 30)
-                
-                Spacer()
-                    .frame(height: 40)
+            // 根据步骤显示不同内容
+            switch currentStep {
+            case .welcome:
+                welcomeContent
+            case .permissions:
+                PermissionsView()
+                    .environmentObject(appState)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
             }
-            .padding(.horizontal, 24)
         }
         .onAppear {
             startAnimation()
@@ -51,6 +49,29 @@ struct OnboardingView: View {
         } message: {
             Text(errorMessage)
         }
+    }
+    
+    // MARK: - Welcome Content
+    private var welcomeContent: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            
+            // Logo和标题
+            headerSection
+                .opacity(animationPhase >= 1 ? 1 : 0)
+                .offset(y: animationPhase >= 1 ? 0 : 30)
+            
+            Spacer()
+            
+            // 邮箱输入
+            emailInputSection
+                .opacity(animationPhase >= 2 ? 1 : 0)
+                .offset(y: animationPhase >= 2 ? 0 : 30)
+            
+            Spacer()
+                .frame(height: 40)
+        }
+        .padding(.horizontal, 24)
     }
     
     // MARK: - Background
@@ -242,7 +263,10 @@ struct OnboardingView: View {
             do {
                 try await userService.loginWithEmail(email)
                 haptic(.success)
-                appState.completeOnboarding()
+                // 跳转到权限请求页面
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    currentStep = .permissions
+                }
             } catch {
                 haptic(.error)
                 errorMessage = error.localizedDescription

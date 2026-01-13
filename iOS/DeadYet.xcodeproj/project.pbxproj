@@ -25,6 +25,7 @@
 		A1000016 /* LaunchScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000016 /* LaunchScreenView.swift */; };
 		A1000017 /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000017 /* Colors.xcassets */; };
 		A1000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000019 /* Assets.xcassets */; };
+		A1000020 /* PermissionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000020 /* PermissionsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +49,7 @@
 		B1000017 /* Colors.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Colors.xcassets; sourceTree = "<group>"; };
 		B1000018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B1000019 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B1000020 /* PermissionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -145,6 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				B1000010 /* OnboardingView.swift */,
+				B1000020 /* PermissionsView.swift */,
 			);
 			path = Onboarding;
 			sourceTree = "<group>";
@@ -278,6 +281,7 @@
 				A1000014 /* GlassCard.swift in Sources */,
 				A1000015 /* VoiceInputButton.swift in Sources */,
 				A1000016 /* LaunchScreenView.swift in Sources */,
+				A1000020 /* PermissionsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
