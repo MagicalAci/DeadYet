@@ -15,8 +15,8 @@ class APIClient: ObservableObject {
     private let session: URLSession
     
     init() {
-        // Zeabur部署的API地址
-        self.baseURL = ProcessInfo.processInfo.environment["API_URL"] ?? "https://dead-yet-api.zeabur.app"
+        // Zeabur部署的API地址 ✅ 已上线
+        self.baseURL = ProcessInfo.processInfo.environment["API_URL"] ?? "https://deadyet.zeabur.app"
         
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
