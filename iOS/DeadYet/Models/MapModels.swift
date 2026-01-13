@@ -125,11 +125,21 @@ struct ComplaintData: Codable, Identifiable {
     var userNickname: String?
     var userEmoji: String = "🐂"
     
-    // 内容
-    var content: String                 // 文字内容或语音转文字
-    var isVoice: Bool = false
+    // 内容类型：text 或 voice
+    var contentType: ContentType = .text
+    
+    // 文本内容（文本类型时使用）
+    var content: String?
+    
+    // 语音内容（语音类型时使用）
+    var voiceUrl: String?               // 语音文件 URL
     var voiceDuration: Int = 0          // 语音时长（秒）
-    var voiceUrl: String?               // 语音文件URL（真实数据用）
+    
+    // 便捷属性
+    var isVoice: Bool { contentType == .voice }
+    
+    // AI 生成标记
+    var isAiGenerated: Bool = false
     
     // 位置
     var latitude: Double
@@ -146,6 +156,12 @@ struct ComplaintData: Codable, Identifiable {
     
     // AI回复
     var aiResponse: String?
+    
+    // 内容类型枚举
+    enum ContentType: String, Codable {
+        case text
+        case voice
+    }
     
     enum Category: String, Codable, CaseIterable {
         case overtime = "加班"
@@ -166,6 +182,27 @@ struct ComplaintData: Codable, Identifiable {
             }
         }
     }
+}
+
+// MARK: - 评论数据
+struct CommentData: Codable, Identifiable {
+    var id: String = UUID().uuidString
+    var userId: String
+    var complaintId: String
+    var parentId: String?               // 回复某条评论
+    
+    var contentType: ComplaintData.ContentType = .text
+    var content: String?
+    var voiceUrl: String?
+    var voiceDuration: Int = 0
+    
+    var userNickname: String?
+    var userEmoji: String = "🐂"
+    
+    var likes: Int = 0
+    var isAiGenerated: Bool = false
+    
+    var createdAt: Date = Date()
 }
 
 // MARK: - 地图数据源协议（方便后续替换真实数据）
@@ -550,17 +587,12 @@ extension MockMapDataProvider {
         return max(0.05, min(0.95, baseRate + tierAdjust + Double.random(in: -0.05...0.05)))
     }
     
-    // 生成抱怨数据（复用之前的内容）
+    // 生成抱怨数据
     static func generateComplaints() -> [ComplaintData] {
         var complaints: [ComplaintData] = []
         
         // 文字抱怨
-        let textContents = complaintTexts
-        // 语音抱怨
-        let voiceContents = voiceComplaintTexts
-        
-        // 生成文字抱怨
-        for text in textContents {
+        for text in complaintTexts {
             let city = cityConfigs.randomElement()!
             let district = districtConfigs[city.name]?.randomElement()
             
@@ -568,8 +600,8 @@ extension MockMapDataProvider {
                 userId: UUID().uuidString,
                 userNickname: randomNickname(),
                 userEmoji: randomEmoji(),
+                contentType: .text,
                 content: text.0,
-                isVoice: false,
                 latitude: city.lat + Double.random(in: -0.1...0.1),
                 longitude: city.lon + Double.random(in: -0.1...0.1),
                 city: city.name,
@@ -581,8 +613,8 @@ extension MockMapDataProvider {
             ))
         }
         
-        // 生成语音抱怨
-        for voice in voiceContents {
+        // 语音抱怨（不需要内容，只有语音）
+        for voice in voiceComplaintTexts {
             let city = cityConfigs.randomElement()!
             let district = districtConfigs[city.name]?.randomElement()
             
@@ -590,8 +622,9 @@ extension MockMapDataProvider {
                 userId: UUID().uuidString,
                 userNickname: randomNickname(),
                 userEmoji: randomEmoji(),
-                content: voice.0,
-                isVoice: true,
+                contentType: .voice,
+                content: nil, // 语音消息不需要文本内容
+                voiceUrl: "https://storage.example.com/voice/\(UUID().uuidString).m4a", // Mock URL
                 voiceDuration: voice.2,
                 latitude: city.lat + Double.random(in: -0.1...0.1),
                 longitude: city.lon + Double.random(in: -0.1...0.1),

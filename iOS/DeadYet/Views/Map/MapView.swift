@@ -680,66 +680,144 @@ struct ComplaintCardView: View {
     let complaint: ComplaintData
     @State private var isPlaying = false
     @State private var playProgress: CGFloat = 0
-    @State private var showTranscript = false
+    @State private var isLiked = false
+    @State private var likesCount: Int = 0
     
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(complaint.userEmoji)
-                .font(.system(size: 26))
-                .frame(width: 44, height: 44)
-                .background(Color(hex: "3C3C3E"))
-                .clipShape(Circle())
-            
-            VStack(alignment: .leading, spacing: 6) {
-                // 头部
-                HStack {
+        VStack(alignment: .leading, spacing: 0) {
+            // 头部
+            HStack(spacing: 10) {
+                Text(complaint.userEmoji)
+                    .font(.system(size: 24))
+                    .frame(width: 40, height: 40)
+                    .background(Color(hex: "3C3C3E"))
+                    .clipShape(Circle())
+                
+                VStack(alignment: .leading, spacing: 2) {
                     Text(complaint.userNickname ?? "匿名牛马")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.9))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white)
                     
-                    if let city = complaint.city {
-                        Text("· \(city)")
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
+                    HStack(spacing: 4) {
+                        if let city = complaint.city {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 9))
+                            Text(city)
+                            if let district = complaint.district {
+                                Text("·")
+                                Text(district)
+                            }
+                        }
                     }
-                    
-                    Spacer()
-                    
-                    Text(timeAgo(complaint.createdAt))
-                        .font(.system(size: 11))
-                        .foregroundColor(.gray.opacity(0.7))
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray)
                 }
                 
-                // 内容
+                Spacer()
+                
+                Text(timeAgo(complaint.createdAt))
+                    .font(.system(size: 11))
+                    .foregroundColor(.gray.opacity(0.7))
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            
+            // 内容区（固定高度，保持卡片一致）
+            Group {
                 if complaint.isVoice {
-                    VoiceBar(duration: complaint.voiceDuration, transcript: complaint.content, isPlaying: $isPlaying, showTranscript: $showTranscript)
+                    VoicePlayerBar(
+                        duration: complaint.voiceDuration,
+                        isPlaying: $isPlaying,
+                        progress: $playProgress
+                    )
                 } else {
                     Text(complaint.content)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.white)
                         .lineLimit(2)
+                        .lineSpacing(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+            }
+            .frame(height: 44) // 固定内容区高度
+            .padding(.horizontal, 14)
+            
+            // 分隔线
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 1)
+                .padding(.top, 10)
+            
+            // 底部互动区
+            HStack(spacing: 0) {
+                // 点赞按钮
+                Button {
+                    toggleLike()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: isLiked ? "hand.thumbsup.fill" : "hand.thumbsup")
+                            .font(.system(size: 14))
+                            .foregroundColor(isLiked ? .deadRed : .gray)
+                        Text(formatNumber(likesCount))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(isLiked ? .deadRed : .gray)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
                 
-                // 底部
-                HStack(spacing: 16) {
-                    Label(formatNumber(complaint.likes), systemImage: "hand.thumbsup.fill")
-                    Label(formatNumber(complaint.comments), systemImage: "bubble.left.fill")
-                    Spacer()
-                    Text("\(complaint.category.emoji) \(complaint.category.rawValue)")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.deadRed)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.deadRed.opacity(0.15))
-                        .clipShape(Capsule())
+                // 分隔线
+                Rectangle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 1, height: 20)
+                
+                // 评论按钮
+                Button {
+                    // TODO: 打开评论
+                    haptic(.light)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "bubble.left")
+                            .font(.system(size: 14))
+                        Text(formatNumber(complaint.comments))
+                            .font(.system(size: 12, weight: .medium))
+                    }
+                    .foregroundColor(.gray)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
                 }
-                .font(.system(size: 12))
-                .foregroundColor(.gray)
+                .buttonStyle(.plain)
+                
+                // 分隔线
+                Rectangle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 1, height: 20)
+                
+                // 分类标签
+                Text("\(complaint.category.emoji) \(complaint.category.rawValue)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.deadRed)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
             }
         }
-        .padding(14)
         .background(Color(hex: "2C2C2E"))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .onAppear {
+            likesCount = complaint.likes
+        }
+    }
+    
+    private func toggleLike() {
+        haptic(.light)
+        withAnimation(.spring(response: 0.3)) {
+            isLiked.toggle()
+            likesCount += isLiked ? 1 : -1
+        }
+        
+        // TODO: 调用 API
     }
     
     private func timeAgo(_ date: Date) -> String {
@@ -757,71 +835,109 @@ struct ComplaintCardView: View {
     }
 }
 
-// MARK: - Voice Bar
-struct VoiceBar: View {
+// MARK: - Voice Player Bar (语音播放条)
+struct VoicePlayerBar: View {
     let duration: Int
-    let transcript: String
     @Binding var isPlaying: Bool
-    @Binding var showTranscript: Bool
+    @Binding var progress: CGFloat
+    
+    // 波形高度数据
+    private let waveHeights: [CGFloat] = [0.3, 0.5, 0.8, 0.4, 0.9, 0.6, 0.7, 0.5, 0.8, 0.4,
+                                           0.6, 0.9, 0.5, 0.7, 0.4, 0.8, 0.6, 0.5, 0.7, 0.4,
+                                           0.5, 0.8, 0.6, 0.7, 0.5]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                haptic(.light)
-                isPlaying.toggle()
-            } label: {
-                HStack(spacing: 8) {
+        Button {
+            togglePlay()
+        } label: {
+            HStack(spacing: 10) {
+                // 播放/暂停按钮
+                ZStack {
+                    Circle()
+                        .fill(Color.deadRed)
+                        .frame(width: 36, height: 36)
+                    
                     Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.deadRed)
-                        .frame(width: 28, height: 28)
-                        .background(Color.deadRed.opacity(0.2))
-                        .clipShape(Circle())
-                    
+                        .foregroundColor(.white)
+                        .offset(x: isPlaying ? 0 : 1)
+                }
+                
+                // 波形
+                GeometryReader { geo in
                     HStack(spacing: 2) {
-                        ForEach(0..<15, id: \.self) { i in
-                            RoundedRectangle(cornerRadius: 1)
-                                .fill(Color.deadRed.opacity(isPlaying ? 0.8 : 0.4))
-                                .frame(width: 2, height: CGFloat.random(in: 6...18))
+                        ForEach(0..<waveHeights.count, id: \.self) { index in
+                            let isPassed = CGFloat(index) / CGFloat(waveHeights.count) <= progress
+                            
+                            RoundedRectangle(cornerRadius: 1.5)
+                                .fill(isPassed ? Color.deadRed : Color.white.opacity(0.3))
+                                .frame(width: 3, height: 28 * waveHeights[index])
                         }
                     }
-                    
-                    Spacer()
-                    
-                    Text("\(duration)\"")
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.7))
+                    .frame(maxHeight: .infinity)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(Color.deadRed.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .frame(height: 28)
+                
+                // 时长
+                Text(isPlaying ? formatTime(Int(Double(duration) * Double(progress))) : "\(duration)\"")
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.white)
+                    .frame(width: 36, alignment: .trailing)
             }
-            .buttonStyle(.plain)
-            
-            Button {
-                withAnimation(.spring(response: 0.3)) { showTranscript.toggle() }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "text.bubble")
-                    Text(showTranscript ? "收起" : "查看文字")
-                    Image(systemName: showTranscript ? "chevron.up" : "chevron.down")
-                }
-                .font(.system(size: 10))
-                .foregroundColor(.gray)
-            }
-            .buttonStyle(.plain)
-            
-            if showTranscript {
-                Text(transcript)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white.opacity(0.7))
-                    .padding(8)
-                    .background(Color.white.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .transition(.opacity)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                LinearGradient(
+                    colors: [Color.deadRed.opacity(0.2), Color.deadRed.opacity(0.1)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 22))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22)
+                    .stroke(Color.deadRed.opacity(0.3), lineWidth: 1)
             }
         }
+        .buttonStyle(.plain)
+    }
+    
+    private func togglePlay() {
+        haptic(.light)
+        
+        if isPlaying {
+            // 暂停
+            isPlaying = false
+        } else {
+            // 播放
+            isPlaying = true
+            simulatePlayback()
+        }
+    }
+    
+    private func simulatePlayback() {
+        progress = 0
+        let steps = 50
+        let interval = Double(duration) / Double(steps)
+        
+        for i in 0...steps {
+            DispatchQueue.main.asyncAfter(deadline: .now() + interval * Double(i)) {
+                guard isPlaying else { return }
+                progress = CGFloat(i) / CGFloat(steps)
+                
+                if i == steps {
+                    isPlaying = false
+                    progress = 0
+                }
+            }
+        }
+    }
+    
+    private func formatTime(_ seconds: Int) -> String {
+        if seconds < 60 {
+            return "\(seconds)\""
+        }
+        return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
     }
 }
 
