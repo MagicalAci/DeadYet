@@ -383,7 +383,9 @@ struct CityDetailSheet: View {
 }
 
 // MARK: - Preview
-#Preview {
-    MapView()
+struct MapView_Previews: PreviewProvider {
+    static var previews: some View {
+        MapView()
+    }
 }
 

@@ -1,10 +1,24 @@
 /**
  * 设计资源上传 API - 包含 AI 图像生成提示词
+ * 图片保存到本地 uploads 目录，可提交到 GitHub
  */
 
 import { Hono } from 'hono'
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 
 const app = new Hono()
+
+// 获取 uploads 目录路径
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+const uploadsDir = join(__dirname, '../../uploads')
+
+// 确保 uploads 目录存在
+if (!existsSync(uploadsDir)) {
+  mkdirSync(uploadsDir, { recursive: true })
+}
 
 // 设计资源定义 - 包含 AI 生成提示词
 const designAssets = [
@@ -219,15 +233,41 @@ const designAssets = [
   }
 ]
 
-// 存储上传的文件
+// 内存缓存（用于快速查询状态）
 const uploadedFiles: Map<string, {
   id: string
   name: string
   size: number
   type: string
   uploadedAt: string
-  base64: string
+  filename: string
+  filePath: string
 }> = new Map()
+
+// 启动时扫描 uploads 目录，加载已有文件
+function loadExistingUploads() {
+  if (!existsSync(uploadsDir)) return
+  
+  const files = readdirSync(uploadsDir)
+  for (const filename of files) {
+    const asset = designAssets.find(a => a.filename === filename)
+    if (asset) {
+      const filePath = join(uploadsDir, filename)
+      uploadedFiles.set(asset.id, {
+        id: asset.id,
+        name: asset.name,
+        size: 0,
+        type: 'image/png',
+        uploadedAt: new Date().toISOString(),
+        filename: filename,
+        filePath: filePath
+      })
+      console.log(`📁 已加载文件: ${filename}`)
+    }
+  }
+}
+
+loadExistingUploads()
 
 // 生成上传页面 HTML
 const getUploadPageHTML = () => `
@@ -784,23 +824,32 @@ app.post('/asset', async (c) => {
     }
     
     const buffer = await file.arrayBuffer()
-    const base64 = Buffer.from(buffer).toString('base64')
+    const uint8Array = new Uint8Array(buffer)
     
+    // 保存到本地文件系统
+    const filePath = join(uploadsDir, asset.filename)
+    writeFileSync(filePath, uint8Array)
+    
+    // 同时保存到内存（用于快速访问）
     uploadedFiles.set(assetId, {
       id: assetId,
       name: asset.name,
       size: file.size,
       type: file.type,
       uploadedAt: new Date().toISOString(),
-      base64: base64
+      filename: asset.filename,
+      filePath: filePath
     })
+    
+    console.log(`✅ 文件已保存: ${filePath}`)
     
     return c.json({
       success: true,
-      message: '上传成功',
+      message: '上传成功，文件已保存到本地',
       id: assetId,
       name: asset.name,
-      filename: asset.filename
+      filename: asset.filename,
+      path: `uploads/${asset.filename}`
     })
   } catch (error) {
     console.error('上传错误:', error)
@@ -830,21 +879,34 @@ app.get('/list', (c) => {
 
 app.get('/file/:id', (c) => {
   const id = c.req.param('id')
-  const file = uploadedFiles.get(id)
+  const asset = designAssets.find(a => a.id === id)
   
+  if (!asset) {
+    return c.json({ success: false, message: '未知的资源类型' }, 404)
+  }
+  
+  const filePath = join(uploadsDir, asset.filename)
+  
+  // 先尝试从文件系统读取
+  if (existsSync(filePath)) {
+    const buffer = readFileSync(filePath)
+    const mimeType = asset.filename.endsWith('.png') ? 'image/png' : 'image/jpeg'
+    
+    return new Response(buffer, {
+      headers: {
+        'Content-Type': mimeType,
+        'Content-Disposition': `inline; filename="${asset.filename}"`
+      }
+    })
+  }
+  
+  // 回退到内存
+  const file = uploadedFiles.get(id)
   if (!file) {
     return c.json({ success: false, message: '文件不存在' }, 404)
   }
   
-  const asset = designAssets.find(a => a.id === id)
-  const buffer = Buffer.from(file.base64, 'base64')
-  
-  return new Response(buffer, {
-    headers: {
-      'Content-Type': file.type,
-      'Content-Disposition': \`inline; filename="\${asset?.filename || file.name}"\`
-    }
-  })
+  return c.json({ success: false, message: '文件不存在' }, 404)
 })
 
 app.get('/spec', (c) => {

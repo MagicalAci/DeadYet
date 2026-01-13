@@ -33,10 +33,9 @@ extension Color {
 }
 
 // MARK: - Theme Colors
+// 注意: deadRed, aliveGreen, darkBackground 已由 Assets 自动生成
 extension Color {
-    // 主色调
-    static let deadRed = Color(hex: "FF3B30")      // 警告红、加班状态
-    static let aliveGreen = Color(hex: "34C759")   // 存活绿、已下班
+    // 额外颜色 (Assets 中未定义的)
     static let struggleYellow = Color(hex: "FFCC00") // 警示黄、挣扎中
     static let darkBg = Color(hex: "1C1C1E")       // 背景黑
     static let cardBg = Color(hex: "2C2C2E")       // 卡片背景

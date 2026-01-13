@@ -464,9 +464,11 @@ struct CheckInView: View {
 }
 
 // MARK: - Preview
-#Preview {
-    CheckInView()
-        .environmentObject(AppState())
-        .environmentObject(UserService())
+struct CheckInView_Previews: PreviewProvider {
+    static var previews: some View {
+        CheckInView()
+            .environmentObject(AppState())
+            .environmentObject(UserService())
+    }
 }
 

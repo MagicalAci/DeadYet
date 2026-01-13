@@ -137,9 +137,11 @@ struct TabBarButton: View {
 }
 
 // MARK: - Preview
-#Preview {
-    ContentView()
-        .environmentObject(AppState())
-        .environmentObject(UserService())
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+            .environmentObject(AppState())
+            .environmentObject(UserService())
+    }
 }
 

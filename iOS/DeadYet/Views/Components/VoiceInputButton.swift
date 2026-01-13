@@ -156,23 +156,25 @@ struct InlineVoiceButton: View {
 }
 
 // MARK: - Preview
-#Preview {
-    ZStack {
-        Color.darkBg.ignoresSafeArea()
-        
-        VStack(spacing: 40) {
-            VoiceInputButton(transcribedText: .constant(""))
+struct VoiceInputButton_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            Color.darkBg.ignoresSafeArea()
             
-            HStack {
-                Text("想骂什么？")
-                    .foregroundColor(.white)
-                Spacer()
-                InlineVoiceButton(text: .constant(""))
+            VStack(spacing: 40) {
+                VoiceInputButton(transcribedText: .constant(""))
+                
+                HStack {
+                    Text("想骂什么？")
+                        .foregroundColor(.white)
+                    Spacer()
+                    InlineVoiceButton(text: .constant(""))
+                }
+                .padding()
+                .background(Color.cardBg)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding()
             }
-            .padding()
-            .background(Color.cardBg)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding()
         }
     }
 }

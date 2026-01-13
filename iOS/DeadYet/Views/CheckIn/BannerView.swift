@@ -262,7 +262,7 @@ struct ConfettiView: View {
 }
 
 // MARK: - Confetti Particle
-struct ConfettiParticle: Identifiable {
+struct ConfettiParticle: Identifiable, @unchecked Sendable {
     let id: UUID
     let shape: AnyShape
     let color: Color
@@ -305,11 +305,14 @@ struct Star: Shape {
 }
 
 // MARK: - AnyShape Helper
-struct AnyShape: Shape {
-    private let pathBuilder: (CGRect) -> Path
+struct AnyShape: Shape, @unchecked Sendable {
+    private let pathBuilder: @Sendable (CGRect) -> Path
     
     init<S: Shape>(_ shape: S) {
-        pathBuilder = shape.path(in:)
+        let shapeCopy = shape
+        pathBuilder = { rect in
+            shapeCopy.path(in: rect)
+        }
     }
     
     func path(in rect: CGRect) -> Path {
@@ -318,15 +321,17 @@ struct AnyShape: Shape {
 }
 
 // MARK: - Preview
-#Preview {
-    ZStack {
-        Color.black.ignoresSafeArea()
-        
-        BannerView(
-            level: .steelWorker,
-            survivalDays: 128,
-            complaint: "领导又让加班了，我真的服了"
-        )
+struct BannerView_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            BannerView(
+                level: .steelWorker,
+                survivalDays: 128,
+                complaint: "领导又让加班了，我真的服了"
+            )
+        }
     }
 }
 

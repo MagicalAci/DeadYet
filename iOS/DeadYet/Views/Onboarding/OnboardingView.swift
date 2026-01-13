@@ -254,9 +254,11 @@ struct OnboardingView: View {
 }
 
 // MARK: - Preview
-#Preview {
-    OnboardingView()
-        .environmentObject(AppState())
-        .environmentObject(UserService())
+struct OnboardingView_Previews: PreviewProvider {
+    static var previews: some View {
+        OnboardingView()
+            .environmentObject(AppState())
+            .environmentObject(UserService())
+    }
 }
 

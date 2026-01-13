@@ -148,7 +148,9 @@ struct LoadingDots: View {
 }
 
 // MARK: - Preview
-#Preview {
-    LaunchScreenView()
+struct LaunchScreenView_Previews: PreviewProvider {
+    static var previews: some View {
+        LaunchScreenView()
+    }
 }
 

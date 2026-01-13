@@ -13,7 +13,6 @@ class NotificationService: NSObject, ObservableObject {
     static let shared = NotificationService()
     
     @Published var isAuthorized: Bool = false
-    @Published var deviceToken: String?
     
     override init() {
         super.init()
@@ -30,29 +29,7 @@ class NotificationService: NSObject, ObservableObject {
             self.isAuthorized = granted
         }
         
-        if granted {
-            await registerForRemoteNotifications()
-        }
-        
         return granted
-    }
-    
-    // MARK: - 注册远程通知
-    
-    private func registerForRemoteNotifications() async {
-        await MainActor.run {
-            UIApplication.shared.registerForRemoteNotifications()
-        }
-    }
-    
-    // MARK: - 处理Device Token
-    
-    func handleDeviceToken(_ token: Data) {
-        let tokenString = token.map { String(format: "%02.2hhx", $0) }.joined()
-        self.deviceToken = tokenString
-        
-        // TODO: 发送到服务器
-        print("📱 Device Token: \(tokenString)")
     }
     
     // MARK: - 本地通知（用于测试）

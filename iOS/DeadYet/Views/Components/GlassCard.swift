@@ -305,37 +305,39 @@ struct CountdownView: View {
 }
 
 // MARK: - Preview
-#Preview {
-    ZStack {
-        Color.darkBg.ignoresSafeArea()
-        
-        VStack(spacing: 30) {
-            GlassCard {
-                VStack {
-                    Text("🐂 Liquid Glass Card")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    Text("玻璃质感效果")
-                        .font(.caption)
-                        .foregroundColor(.gray)
+struct GlassCard_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            Color.darkBg.ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                GlassCard {
+                    VStack {
+                        Text("🐂 Liquid Glass Card")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Text("玻璃质感效果")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
                 }
+                
+                HStack(spacing: 20) {
+                    StatusBadge(status: .checkedIn)
+                    StatusBadge(status: .working)
+                    StatusBadge(status: .offline)
+                }
+                
+                CountdownView(targetHour: 18, targetMinute: 0)
+                
+                FloatingActionButton(icon: "checkmark", color: .deadRed) {
+                    print("Tapped!")
+                }
+                
+                LoadingIndicator(message: "正在加载...")
             }
-            
-            HStack(spacing: 20) {
-                StatusBadge(status: .checkedIn)
-                StatusBadge(status: .working)
-                StatusBadge(status: .offline)
-            }
-            
-            CountdownView(targetHour: 18, targetMinute: 0)
-            
-            FloatingActionButton(icon: "checkmark", color: .deadRed) {
-                print("Tapped!")
-            }
-            
-            LoadingIndicator(message: "正在加载...")
+            .padding()
         }
-        .padding()
     }
 }
 

@@ -40,13 +40,13 @@ class LocationService: NSObject, ObservableObject {
         geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, error in
             guard let self = self else { return }
             
-            if let error = error {
-                self.errorMessage = error.localizedDescription
-                return
-            }
-            
-            if let placemark = placemarks?.first {
-                Task { @MainActor in
+            Task { @MainActor in
+                if let error = error {
+                    self.errorMessage = error.localizedDescription
+                    return
+                }
+                
+                if let placemark = placemarks?.first {
                     self.currentCity = placemark.locality ?? placemark.administrativeArea
                     self.currentDistrict = placemark.subLocality ?? placemark.subAdministrativeArea
                 }
