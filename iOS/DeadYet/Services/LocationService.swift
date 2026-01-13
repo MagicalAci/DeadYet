@@ -2,6 +2,7 @@
 //  LocationService.swift
 //  DeadYet - 还没死？
 //
+//  真实GPS定位服务
 
 import Foundation
 import CoreLocation
@@ -9,49 +10,186 @@ import MapKit
 
 @MainActor
 class LocationService: NSObject, ObservableObject {
+    // MARK: - Published Properties
     @Published var currentLocation: CLLocation?
     @Published var currentCity: String?
     @Published var currentDistrict: String?
     @Published var authorizationStatus: CLAuthorizationStatus = .notDetermined
-    @Published var errorMessage: String?
+    @Published var isLocating: Bool = false
+    @Published var locationError: LocationError?
+    @Published var hasReceivedFirstLocation: Bool = false
     
+    // MARK: - Private Properties
     private let locationManager = CLLocationManager()
     private let geocoder = CLGeocoder()
+    private var isRequestingPermission = false
     
+    // 定位错误类型
+    enum LocationError: Error, Equatable {
+        case permissionDenied
+        case permissionRestricted
+        case locationUnknown
+        case networkError
+        case geocodingFailed
+        case notInChina
+        
+        var message: String {
+            switch self {
+            case .permissionDenied: return "请在设置中开启位置权限"
+            case .permissionRestricted: return "位置权限受限"
+            case .locationUnknown: return "无法获取位置"
+            case .networkError: return "网络错误"
+            case .geocodingFailed: return "无法解析地址"
+            case .notInChina: return "当前位置不在服务范围内"
+            }
+        }
+    }
+    
+    // MARK: - Init
     override init() {
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.distanceFilter = 100 // 100米更新一次
+        
+        // 初始化时检查当前授权状态
+        authorizationStatus = locationManager.authorizationStatus
     }
     
+    // MARK: - Public Methods
+    
+    /// 请求定位权限
     func requestPermission() {
-        locationManager.requestWhenInUseAuthorization()
+        guard !isRequestingPermission else { return }
+        isRequestingPermission = true
+        
+        switch authorizationStatus {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .denied, .restricted:
+            locationError = authorizationStatus == .denied ? .permissionDenied : .permissionRestricted
+        case .authorizedWhenInUse, .authorizedAlways:
+            startUpdatingLocation()
+        @unknown default:
+            break
+        }
+        
+        isRequestingPermission = false
     }
     
+    /// 开始定位
     func startUpdatingLocation() {
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            requestPermission()
+            return
+        }
+        
+        isLocating = true
+        locationError = nil
         locationManager.startUpdatingLocation()
+        
+        // 5秒超时
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            guard let self = self, self.isLocating, self.currentLocation == nil else { return }
+            self.isLocating = false
+            self.locationError = .locationUnknown
+        }
     }
     
+    /// 停止定位
     func stopUpdatingLocation() {
         locationManager.stopUpdatingLocation()
+        isLocating = false
     }
     
+    /// 请求一次定位
+    func requestSingleLocation() {
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            requestPermission()
+            return
+        }
+        
+        isLocating = true
+        locationError = nil
+        locationManager.requestLocation()
+    }
+    
+    /// 检查坐标是否在中国境内
+    func isCoordinateInChina(_ coordinate: CLLocationCoordinate2D) -> Bool {
+        // 中国大致经纬度范围（包含港澳台）
+        let latRange = 18.0...54.0
+        let lonRange = 73.0...135.0
+        return latRange.contains(coordinate.latitude) && lonRange.contains(coordinate.longitude)
+    }
+    
+    /// 根据坐标查找最近的城市
+    func findNearestCity(to coordinate: CLLocationCoordinate2D) -> (name: String, lat: Double, lon: Double)? {
+        let userLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        
+        var nearestCity: (name: String, lat: Double, lon: Double)?
+        var minDistance: CLLocationDistance = .infinity
+        
+        for city in Self.majorCities {
+            let cityLocation = CLLocation(latitude: city.lat, longitude: city.lon)
+            let distance = userLocation.distance(from: cityLocation)
+            if distance < minDistance {
+                minDistance = distance
+                nearestCity = (city.name, city.lat, city.lon)
+            }
+        }
+        
+        return nearestCity
+    }
+    
+    // MARK: - Private Methods
+    
     private func reverseGeocode(_ location: CLLocation) {
-        geocoder.reverseGeocodeLocation(location) { [weak self] placemarks, error in
+        geocoder.cancelGeocode() // 取消之前的请求
+        
+        geocoder.reverseGeocodeLocation(location, preferredLocale: Locale(identifier: "zh_CN")) { [weak self] placemarks, error in
             guard let self = self else { return }
             
             Task { @MainActor in
                 if let error = error {
-                    self.errorMessage = error.localizedDescription
+                    print("反向地理编码失败: \(error.localizedDescription)")
+                    // 即使编码失败，也尝试用最近城市
+                    if let nearest = self.findNearestCity(to: location.coordinate) {
+                        self.currentCity = nearest.name
+                    }
                     return
                 }
                 
                 if let placemark = placemarks?.first {
-                    self.currentCity = placemark.locality ?? placemark.administrativeArea
-                    self.currentDistrict = placemark.subLocality ?? placemark.subAdministrativeArea
+                    // 优先使用 locality，其次是 administrativeArea
+                    let city = placemark.locality ?? placemark.administrativeArea
+                    let district = placemark.subLocality ?? placemark.subAdministrativeArea
+                    
+                    // 处理直辖市（北京、上海、天津、重庆）
+                    if let city = city {
+                        self.currentCity = self.normalizeCityName(city)
+                    } else if let area = placemark.administrativeArea {
+                        self.currentCity = self.normalizeCityName(area)
+                    }
+                    
+                    self.currentDistrict = district
+                    
+                    print("📍 定位成功: \(self.currentCity ?? "未知") - \(self.currentDistrict ?? "未知")")
                 }
             }
         }
+    }
+    
+    /// 规范化城市名称（去掉"市"、"省"等后缀）
+    private func normalizeCityName(_ name: String) -> String {
+        var normalized = name
+        let suffixes = ["市", "省", "自治区", "特别行政区"]
+        for suffix in suffixes {
+            if normalized.hasSuffix(suffix) {
+                normalized = String(normalized.dropLast(suffix.count))
+                break
+            }
+        }
+        return normalized
     }
 }
 
@@ -60,37 +198,94 @@ extension LocationService: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         
+        // 过滤无效位置
+        guard location.horizontalAccuracy >= 0,
+              location.horizontalAccuracy < 1000 else { return }
+        
         Task { @MainActor in
+            let oldLocation = self.currentLocation
             self.currentLocation = location
-            self.reverseGeocode(location)
+            self.isLocating = false
+            
+            if !self.hasReceivedFirstLocation {
+                self.hasReceivedFirstLocation = true
+            }
+            
+            // 检查是否在中国
+            if !self.isCoordinateInChina(location.coordinate) {
+                self.locationError = .notInChina
+                // 使用最近的城市
+                if let nearest = self.findNearestCity(to: location.coordinate) {
+                    self.currentCity = nearest.name
+                    print("📍 不在中国境内，使用最近城市: \(nearest.name)")
+                }
+                return
+            }
+            
+            // 如果位置变化超过500米，重新进行地理编码
+            if oldLocation == nil || (oldLocation?.distance(from: location) ?? 0) > 500 {
+                self.reverseGeocode(location)
+            }
         }
     }
     
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor in
-            self.errorMessage = error.localizedDescription
+            self.isLocating = false
+            
+            if let clError = error as? CLError {
+                switch clError.code {
+                case .denied:
+                    self.locationError = .permissionDenied
+                case .network:
+                    self.locationError = .networkError
+                case .locationUnknown:
+                    self.locationError = .locationUnknown
+                default:
+                    self.locationError = .locationUnknown
+                }
+            } else {
+                self.locationError = .locationUnknown
+            }
+            
+            print("❌ 定位失败: \(error.localizedDescription)")
         }
     }
     
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         Task { @MainActor in
+            let oldStatus = self.authorizationStatus
             self.authorizationStatus = manager.authorizationStatus
+            
+            print("📍 定位权限变化: \(oldStatus.rawValue) -> \(manager.authorizationStatus.rawValue)")
             
             switch manager.authorizationStatus {
             case .authorizedWhenInUse, .authorizedAlways:
+                // 授权后自动开始定位
+                self.locationError = nil
                 self.startUpdatingLocation()
-            case .denied, .restricted:
-                self.errorMessage = "需要位置权限才能显示你在哪个城市加班"
-            default:
+                
+            case .denied:
+                self.locationError = .permissionDenied
+                self.isLocating = false
+                
+            case .restricted:
+                self.locationError = .permissionRestricted
+                self.isLocating = false
+                
+            case .notDetermined:
+                break
+                
+            @unknown default:
                 break
             }
         }
     }
 }
 
-// MARK: - Mock Data for China Cities
+// MARK: - Static Data
 extension LocationService {
-    // 全国主要城市（更丰富）
+    // 全国主要城市
     static let majorCities: [(name: String, lat: Double, lon: Double, tier: Int)] = [
         // 一线城市
         ("北京", 39.9042, 116.4074, 1),
@@ -138,282 +333,4 @@ extension LocationService {
         "南京": ["玄武区", "秦淮区", "建邺区", "鼓楼区", "栖霞区", "雨花台区", "江宁区", "浦口区"],
         "武汉": ["武昌区", "江汉区", "汉阳区", "洪山区", "江岸区", "硚口区", "青山区", "东湖高新"]
     ]
-    
-    static func generateMockCityStats() -> [CityStats] {
-        majorCities.map { city in
-            // 一线城市人数更多
-            let baseTotal: Int
-            switch city.tier {
-            case 1: baseTotal = Int.random(in: 80000...200000)
-            case 2: baseTotal = Int.random(in: 30000...80000)
-            default: baseTotal = Int.random(in: 10000...40000)
-            }
-            
-            // 根据当前时间动态调整下班率
-            let hour = Calendar.current.component(.hour, from: Date())
-            let baseRate: Double
-            switch hour {
-            case 0..<9: baseRate = Double.random(in: 0.05...0.15)  // 凌晨
-            case 9..<17: baseRate = Double.random(in: 0.1...0.25)  // 上班时间
-            case 17..<18: baseRate = Double.random(in: 0.2...0.35) // 刚到下班
-            case 18..<19: baseRate = Double.random(in: 0.35...0.55) // 正常下班
-            case 19..<20: baseRate = Double.random(in: 0.5...0.7)  // 稍晚下班
-            case 20..<21: baseRate = Double.random(in: 0.6...0.8)  // 加班结束
-            case 21..<22: baseRate = Double.random(in: 0.75...0.9) // 晚加班结束
-            default: baseRate = Double.random(in: 0.85...0.95)     // 深夜
-            }
-            
-            let checked = Int(Double(baseTotal) * baseRate)
-            
-            // 平均下班时间：一线城市更晚
-            let avgTimes: [String]
-            switch city.tier {
-            case 1: avgTimes = ["20:15", "20:45", "21:00", "21:30", "22:00"]
-            case 2: avgTimes = ["19:30", "20:00", "20:30", "21:00", "21:30"]
-            default: avgTimes = ["18:30", "19:00", "19:30", "20:00", "20:30"]
-            }
-            
-            return CityStats(
-                city: city.name,
-                totalWorkers: baseTotal,
-                checkedIn: checked,
-                stillWorking: baseTotal - checked,
-                averageCheckOutTime: avgTimes.randomElement(),
-                topComplaint: [
-                    "领导又让加班了", "需求改了三遍", "开了一天的会",
-                    "工资还没发", "同事又甩锅了", "产品又改需求",
-                    "代码又要重构", "服务器又崩了", "客户又投诉了"
-                ].randomElement(),
-                latitude: city.lat,
-                longitude: city.lon
-            )
-        }
-    }
-    
-    static func generateMockComplaints() -> [Complaint] {
-        // 文字抱怨内容（更丰富）
-        let textComplaints: [(String, String)] = [
-            // 加班类 - 30条
-            ("领导说开个快会，结果开了3个小时，我人都麻了", "加班"),
-            ("加班到10点，加班费一分没有，爱谁谁吧", "加班"),
-            ("周五晚上10点来需求，周一早上要，这是人能干的事？", "加班"),
-            ("通勤2小时，上班8小时，加班4小时，睡觉6小时，这是人过的日子？", "加班"),
-            ("又是凌晨12点下班的一天，出租车司机都认识我了", "加班"),
-            ("连续加班两周，周末还要加班，我是不是应该住公司？", "加班"),
-            ("说好的弹性工作制，结果只弹不缩，永远加班", "加班"),
-            ("老板说项目紧急要加班，项目都紧急三年了", "加班"),
-            ("今天又是最后一个走的，保安都跟我混熟了", "加班"),
-            ("加班加到女朋友跟我分手，说我爱工作胜过爱她", "加班"),
-            ("凌晨两点还在改bug，明天还要8点开会", "加班"),
-            ("周末加班还要调休，调休永远用不了", "加班"),
-            ("国庆七天，加班五天，我是公司的牛马", "加班"),
-            ("晚上11点下班，早上8点上班，我是机器人吗", "加班"),
-            ("加班到现在，外卖都不送了，只能吃泡面", "加班"),
-            
-            // 领导类 - 25条
-            ("老板画的饼我都能开面包店了", "领导"),
-            ("领导开会只会说'大家要努力'，你倒是努努力给我涨工资啊", "领导"),
-            ("领导说年底双薪，现在说资金紧张，我信了他的邪", "领导"),
-            ("领导永远都是对的，错的都是我们", "领导"),
-            ("领导邮件回复只有一个字：知", "领导"),
-            ("我们领导最大的本事就是把功劳据为己有", "领导"),
-            ("领导说要给我升职，结果只升了一个title，工资不变", "领导"),
-            ("领导又在群里@所有人了，心态崩了", "领导"),
-            ("领导说'这个需求很简单'，我就知道完蛋了", "领导"),
-            ("老板说公司是大家的家，那我能带狗来上班吗", "领导"),
-            ("领导的'我觉得'比甲方的'我觉得'还可怕", "领导"),
-            ("领导说年轻人要多锻炼，所以天天加班锻炼我", "领导"),
-            ("老板说要降本增效，先把我们的零食和咖啡取消了", "领导"),
-            ("领导开完会说很满意，然后发了一堆修改意见", "领导"),
-            ("领导最喜欢说'换位思考'，然后从不站我们的角度想", "领导"),
-            
-            // 同事类 - 20条
-            ("同事把锅甩给我，我真是服了这帮孙子", "同事"),
-            ("旁边同事每天吃螺蛳粉，我快窒息了", "同事"),
-            ("同事又在群里发正能量文章了，麻烦闭嘴", "同事"),
-            ("同事总是抢我的活干，然后汇报的时候说是他做的", "同事"),
-            ("同事请假我顶班，我请假没人管", "同事"),
-            ("旁边工位的同事每天打电话声音特别大", "同事"),
-            ("同事总是问我借充电器，从来不还", "同事"),
-            ("同事背后说我坏话被我听到了，尴尬死", "同事"),
-            ("新来的同事工资比我高，我干了三年了", "同事"),
-            ("同事每天准点下班，活全是我干的", "同事"),
-            ("同事偷吃了我的零食，还不承认", "同事"),
-            ("开会的时候同事抢我的发言，气死了", "同事"),
-            ("同事总是在我旁边剪指甲，受不了了", "同事"),
-            ("办公室有个同事每天香水喷太多，头疼", "同事"),
-            
-            // 工资类 - 20条
-            ("工资拖了半个月还没发，要饿死了", "工资"),
-            ("试用期6个月，说好的转正又延了，画大饼专业户", "工资"),
-            ("说好的涨薪，结果涨了200块，打发叫花子呢？", "工资"),
-            ("年终奖发了500块购物卡，还只能在公司食堂用", "工资"),
-            ("五险一金按最低标准交，工资条一堆扣款看不懂", "工资"),
-            ("同行业同岗位，我们公司工资倒数第一", "工资"),
-            ("绩效永远B，奖金永远差那么一点点", "工资"),
-            ("工资到手还没房租高，我在给房东打工", "工资"),
-            ("说好的股票期权，现在说公司不上市了", "工资"),
-            ("年终奖说是0-6个月，结果大家都是0", "工资"),
-            ("涨薪跑不赢通胀，越干越穷", "工资"),
-            ("招聘写的薪资范围是15-25k，进来才知道是15k", "工资"),
-            ("公司说今年效益不好，可老板换了辆新车", "工资"),
-            ("每个月工资一发就还花呗、还房贷，一分不剩", "工资"),
-            
-            // 开会类 - 15条
-            ("早上9点开会开到下午6点，啥活没干", "开会"),
-            ("每天开会开会开会，工作都是加班干的", "开会"),
-            ("会议纪要写了30页，没有一条执行的", "开会"),
-            ("开会讨论怎么提高效率，开了一天", "开会"),
-            ("一天7个会，上厕所都没时间", "开会"),
-            ("开会开到一半，领导说'这个会以后再开'", "开会"),
-            ("每周例会雷打不动3小时，就为了汇报5分钟的工作", "开会"),
-            ("开会迟到扣钱，开会超时没人管", "开会"),
-            ("会议室永远订不到，只能站着开会", "开会"),
-            ("开会内容和上周一模一样，复制粘贴的吗", "开会"),
-            ("线上会议，总有人不开摄像头偷偷干别的", "开会"),
-            ("领导喜欢开完会发朋友圈，配文'团队很棒'", "开会"),
-            
-            // 产品/需求类 - 20条
-            ("需求又改了，产品经理脑子是不是有坑", "其他"),
-            ("产品说这个需求很简单，就改一下，改了三天", "其他"),
-            ("UI给的设计图手机上根本放不下，设计师用的2米大屏？", "其他"),
-            ("测试提的bug比我写的代码还多", "其他"),
-            ("上线前一小时说要改需求，我直接原地升天", "其他"),
-            ("需求文档写的是A，评审说的是B，上线要求是C", "其他"),
-            ("产品说参考竞品做，竞品有100个人，我们就3个", "其他"),
-            ("功能还没上线，需求已经改了五版", "其他"),
-            ("甲方说不满意，但说不出哪里不满意", "其他"),
-            ("代码写完了，产品说这个功能不要了", "其他"),
-            ("测试说有bug，但又复现不出来", "其他"),
-            ("接口文档和实际完全不一样，后端在整我", "其他"),
-            ("设计说技术实现不了，技术说设计做不出来", "其他"),
-            ("运营说效果不好，要优化，但不说怎么优化", "其他"),
-            
-            // 其他类 - 20条
-            ("公司空调永远26度，冬天冷死夏天热死", "其他"),
-            ("电梯等了20分钟，直接爬20层算了", "其他"),
-            ("食堂今天又是那几个菜，我都能背出菜单了", "其他"),
-            ("公司厕所永远在打扫，憋死我算了", "其他"),
-            ("打印机又坏了，IT说明天修，已经明天了一个月", "其他"),
-            ("WiFi又断了，年费几十万的网络就这？", "其他"),
-            ("工位太小，键盘鼠标都放不下", "其他"),
-            ("公司茶水间的咖啡机永远排队", "其他"),
-            ("显示器太小，眼睛都看瞎了", "其他"),
-            ("椅子坐着腰疼，人体工学椅只有领导有", "其他"),
-            ("公司绿植都死了，和我的心情一样", "其他"),
-            ("门禁卡又消磁了，保安不让进", "其他"),
-            ("公司的微波炉太少，热个饭排队20分钟", "其他"),
-            ("停车场又满了，停在外面被贴条", "其他"),
-            ("公司的纸巾都是最便宜的那种，刮脸", "其他"),
-            ("饮水机的水忽冷忽热，喝个水都费劲", "其他"),
-            ("工牌绳子断了三次了，质量太差", "其他"),
-            ("会议室的投影仪永远连不上，每次都浪费15分钟", "其他")
-        ]
-        
-        // 语音抱怨内容（转文字后显示）
-        let voiceComplaints: [(String, String, Int)] = [
-            // (语音转文字内容, 分类, 时长秒)
-            ("啊我真的要疯了今天领导让我改了十遍方案十遍啊我真的受不了了这是人干的事吗", "领导", 12),
-            ("刚刚开完会三个小时啊三个小时什么都没讨论出来我真的无语了", "开会", 8),
-            ("加班到现在饭都没吃你能信吗外卖也不送了我只能吃泡面", "加班", 7),
-            ("同事又甩锅给我了我真是服了这是第几次了啊", "同事", 5),
-            ("工资到现在还没发我房租都交不起了怎么办啊", "工资", 6),
-            ("今天需求又改了改了三遍了产品经理脑子是不是有问题啊", "其他", 8),
-            ("哎...我不想说话了太累了真的太累了", "加班", 4),
-            ("这破公司我真的待不下去了天天加班工资又低", "加班", 6),
-            ("领导又画饼了说年底升职加薪我都听了三年了", "领导", 7),
-            ("测试又提了一堆bug我写的代码真的有那么烂吗", "其他", 5),
-            ("凌晨了还在公司你敢信吗我都快猝死了", "加班", 5),
-            ("唉今天心态崩了什么都不想干了", "其他", 3),
-            ("被客户骂了一顿真的委屈想哭", "其他", 4),
-            ("今天又被领导点名批评了我做错什么了", "领导", 6),
-            ("工位旁边的人每天吃那个臭臭的东西我真的忍不了", "同事", 7),
-            ("早起赶地铁挤得我都喘不过气来", "其他", 4),
-            ("又被拉去团建了周末能不能让我休息一下", "其他", 5),
-            ("项目又延期了这是第四次延期了", "其他", 4),
-            ("开会开到一半领导说算了下次再开什么东西", "开会", 5),
-            ("绩效又是B我都不知道怎么才能拿A", "工资", 5)
-        ]
-        
-        var allComplaints: [Complaint] = []
-        
-        // 生成文字抱怨
-        for item in textComplaints {
-            let city = majorCities.randomElement()!
-            let districts = cityDistricts[city.name] ?? ["市中心"]
-            
-            let complaint = Complaint(
-                userId: UUID().uuidString,
-                userNickname: randomNickname(),
-                userEmoji: randomEmoji(),
-                content: item.0,
-                aiResponse: nil,
-                location: Location(
-                    latitude: city.lat + Double.random(in: -0.05...0.05),
-                    longitude: city.lon + Double.random(in: -0.05...0.05),
-                    city: city.name,
-                    district: districts.randomElement()
-                ),
-                createdAt: Date().addingTimeInterval(-Double.random(in: 0...14400)), // 4小时内
-                likes: Int.random(in: 5...3000),
-                comments: Int.random(in: 0...300),
-                category: Complaint.Category(rawValue: item.1) ?? .general,
-                isVoice: false
-            )
-            allComplaints.append(complaint)
-        }
-        
-        // 生成语音抱怨
-        for item in voiceComplaints {
-            let city = majorCities.randomElement()!
-            let districts = cityDistricts[city.name] ?? ["市中心"]
-            
-            let complaint = Complaint(
-                userId: UUID().uuidString,
-                userNickname: randomNickname(),
-                userEmoji: randomEmoji(),
-                content: "[语音消息]", // 简略显示
-                aiResponse: nil,
-                location: Location(
-                    latitude: city.lat + Double.random(in: -0.05...0.05),
-                    longitude: city.lon + Double.random(in: -0.05...0.05),
-                    city: city.name,
-                    district: districts.randomElement()
-                ),
-                createdAt: Date().addingTimeInterval(-Double.random(in: 0...7200)), // 2小时内
-                likes: Int.random(in: 50...5000), // 语音更容易获得点赞
-                comments: Int.random(in: 10...500),
-                category: Complaint.Category(rawValue: item.1) ?? .general,
-                isVoice: true,
-                voiceDuration: item.2,
-                voiceTranscript: item.0
-            )
-            allComplaints.append(complaint)
-        }
-        
-        return allComplaints.shuffled()
-    }
-    
-    // 随机昵称
-    private static func randomNickname() -> String {
-        [
-            "匿名牛马", "加班狗", "社畜一号", "韭菜本菜", "打工人",
-            "苦逼程序员", "PPT战士", "Excel大师", "会议室常客", "卑微打工仔",
-            "摸鱼专家", "带薪拉屎", "工资小偷", "划水达人", "职场老油条",
-            "牛马本马", "搬砖侠", "码农日记", "社畜日常", "打工魂",
-            "敲代码的", "写文档的", "做设计的", "搞运营的", "干销售的",
-            "底层员工", "普通牛马", "干饭人", "夜班战士", "007选手",
-            "没有周末", "猝死预备", "离职倒计时", "在线崩溃", "精神离职"
-        ].randomElement()!
-    }
-    
-    // 随机Emoji头像
-    private static func randomEmoji() -> String {
-        [
-            "🐂", "🐴", "🐕", "🐷", "🦊", "🐱", "🐰", "🐻", "🐼", "🦁",
-            "🐯", "🐸", "🐔", "🐧", "🐦", "🦆", "🦉", "🐺", "🐗", "🐵",
-            "🙈", "🙉", "🙊", "🐶", "🐲", "🦄", "🐙", "🦀", "🐢", "🐍"
-        ].randomElement()!
-    }
 }
-

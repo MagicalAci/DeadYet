@@ -11,6 +11,7 @@ import MapKit
 struct MapView: View {
     @StateObject private var viewModel = MapViewModel()
     @StateObject private var locationService = LocationService()
+    @State private var showLocationSettings = false
     
     var body: some View {
         ZStack {
@@ -35,28 +36,51 @@ struct MapView: View {
             }
         }
         .onAppear {
-            setupLocation()
+            initializeLocation()
             viewModel.loadData()
         }
+        // 监听位置变化
         .onChange(of: locationService.currentLocation) { _, newLocation in
-            if let location = newLocation {
-                viewModel.updateUserLocation(location.coordinate, city: locationService.currentCity)
-            }
+            handleLocationUpdate(newLocation)
         }
+        // 监听城市变化
         .onChange(of: locationService.currentCity) { _, newCity in
             if let city = newCity {
                 viewModel.updateCurrentCity(city)
             }
         }
+        // 监听授权状态变化
+        .onChange(of: locationService.authorizationStatus) { _, status in
+            handleAuthorizationChange(status)
+        }
+        // 监听第一次定位成功
+        .onChange(of: locationService.hasReceivedFirstLocation) { _, hasReceived in
+            if hasReceived, let location = locationService.currentLocation {
+                handleFirstLocation(location)
+            }
+        }
+        // 城市详情
         .sheet(item: $viewModel.selectedCity) { city in
             CityDetailSheet(city: city, dataProvider: viewModel.dataProvider)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        // 区域详情
         .sheet(item: $viewModel.selectedDistrict) { district in
             DistrictDetailSheet(district: district, dataProvider: viewModel.dataProvider)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        // 位置设置提示
+        .alert("需要位置权限", isPresented: $showLocationSettings) {
+            Button("去设置") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("请在设置中开启位置权限，以便显示您所在城市的加班数据")
         }
     }
     
@@ -87,9 +111,9 @@ struct MapView: View {
             ForEach(MapViewModel.ViewMode.allCases, id: \.self) { mode in
                 Button {
                     withAnimation(.spring(response: 0.3)) {
-                        viewModel.switchViewMode(to: mode)
+                        switchViewMode(to: mode)
                     }
-                    haptic(.light)
+                    haptic(.medium)
                 } label: {
                     Text(mode.title)
                         .font(.system(size: 14, weight: .semibold))
@@ -138,22 +162,38 @@ struct MapView: View {
                         .foregroundColor(.gray)
                 }
                 
-                // 城市选择按钮
+                // 重新定位按钮
                 Button {
-                    // TODO: 打开城市选择器
-                    haptic(.light)
+                    relocate()
                 } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.gray)
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.blue)
+                        .frame(width: 24, height: 24)
+                        .background(Color.blue.opacity(0.15))
+                        .clipShape(Circle())
                 }
-            } else if viewModel.isLocating {
+            } else if locationService.isLocating {
                 ProgressView()
                     .scaleEffect(0.8)
                     .tint(.white)
                 Text("定位中...")
                     .font(.system(size: 14))
                     .foregroundColor(.gray)
+            } else if locationService.locationError != nil {
+                Image(systemName: "location.slash")
+                    .font(.system(size: 12))
+                    .foregroundColor(.orange)
+                
+                Text(locationService.locationError?.message ?? "定位失败")
+                    .font(.system(size: 14))
+                    .foregroundColor(.orange)
+                
+                Button("重试") {
+                    relocate()
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.blue)
             }
             
             Spacer()
@@ -182,8 +222,9 @@ struct MapView: View {
     // MARK: - Map Content
     private var mapContent: some View {
         Map(position: $viewModel.cameraPosition, interactionModes: .all) {
-            // 用户位置
-            if locationService.authorizationStatus == .authorizedWhenInUse ||
+            // 用户位置标记
+            if let location = locationService.currentLocation,
+               locationService.authorizationStatus == .authorizedWhenInUse ||
                locationService.authorizationStatus == .authorizedAlways {
                 UserAnnotation()
             }
@@ -250,7 +291,19 @@ struct MapView: View {
                 
                 Spacer()
                 
-                // 数量
+                // 刷新按钮
+                Button {
+                    refreshComplaints()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 32, height: 32)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                
+                // 数量和展开按钮
                 HStack(spacing: 8) {
                     HStack(spacing: 4) {
                         Circle().fill(Color.deadRed).frame(width: 6, height: 6)
@@ -274,6 +327,7 @@ struct MapView: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     viewModel.isComplaintWallExpanded.toggle()
                 }
+                haptic(.light)
             }
             
             // 抱怨列表
@@ -327,15 +381,75 @@ struct MapView: View {
     }
     
     // MARK: - Actions
-    private func setupLocation() {
+    
+    private func initializeLocation() {
         switch locationService.authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
             locationService.startUpdatingLocation()
-            viewModel.isLocating = true
         case .notDetermined:
+            // 首次使用，请求权限
             locationService.requestPermission()
+        case .denied, .restricted:
+            // 使用默认城市
+            viewModel.setDefaultCity("北京")
+        @unknown default:
+            viewModel.setDefaultCity("北京")
+        }
+    }
+    
+    private func handleLocationUpdate(_ location: CLLocation?) {
+        guard let location = location else { return }
+        
+        viewModel.updateUserLocation(
+            location.coordinate,
+            city: locationService.currentCity
+        )
+    }
+    
+    private func handleFirstLocation(_ location: CLLocation) {
+        print("🎯 首次定位成功: \(location.coordinate)")
+        
+        // 如果是同城模式，自动定位到用户位置
+        if viewModel.viewMode == .local {
+            viewModel.animateToUserLocation()
+        }
+    }
+    
+    private func handleAuthorizationChange(_ status: CLAuthorizationStatus) {
+        switch status {
+        case .denied:
+            showLocationSettings = true
+            viewModel.setDefaultCity("北京")
+        case .restricted:
+            viewModel.setDefaultCity("北京")
         default:
             break
+        }
+    }
+    
+    private func switchViewMode(to mode: MapViewModel.ViewMode) {
+        viewModel.switchViewMode(to: mode)
+        
+        // 切换到同城模式时，如果有真实位置就定位过去
+        if mode == .local, let location = locationService.currentLocation {
+            viewModel.updateUserLocation(location.coordinate, city: locationService.currentCity)
+        }
+    }
+    
+    private func relocate() {
+        haptic(.light)
+        locationService.startUpdatingLocation()
+        
+        // 如果已有位置，先跳转过去
+        if let location = locationService.currentLocation {
+            viewModel.animateToUserLocation()
+        }
+    }
+    
+    private func refreshComplaints() {
+        haptic(.medium)
+        Task {
+            await viewModel.refreshComplaints()
         }
     }
 }
@@ -356,9 +470,8 @@ class MapViewModel: ObservableObject {
     }
     
     // 状态
-    @Published var viewMode: ViewMode = .national
+    @Published var viewMode: ViewMode = .local // 默认同城
     @Published var isLoading: Bool = false
-    @Published var isLocating: Bool = false
     @Published var isComplaintWallExpanded: Bool = false
     
     // 数据
@@ -375,7 +488,7 @@ class MapViewModel: ObservableObject {
     @Published var currentCity: String?
     @Published var userCoordinate: CLLocationCoordinate2D?
     
-    // 地图位置
+    // 地图位置 - 默认显示中国
     @Published var cameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 35.8, longitude: 104.0),
@@ -383,7 +496,7 @@ class MapViewModel: ObservableObject {
         )
     )
     
-    // 数据提供者（方便后续替换真实API）
+    // 数据提供者
     let dataProvider: MapDataProvider = MockMapDataProvider.shared
     
     // 显示统计
@@ -394,7 +507,7 @@ class MapViewModel: ObservableObject {
             return total
         case .local:
             let total = districts.reduce((0, 0)) { ($0.0 + $1.checkedIn, $0.1 + $1.stillWorking) }
-            return total
+            return total.0 > 0 ? total : cities.reduce((0, 0)) { ($0.0 + $1.checkedIn, $0.1 + $1.stillWorking) }
         }
     }
     
@@ -406,63 +519,86 @@ class MapViewModel: ObservableObject {
             
             do {
                 cities = try await dataProvider.fetchAllCities()
-                complaints = try await dataProvider.fetchComplaints(city: nil, district: nil, limit: 50)
+                
+                // 如果是同城模式且有当前城市，加载本地数据
+                if viewMode == .local, let city = currentCity {
+                    await loadLocalData(for: city)
+                } else {
+                    complaints = try await dataProvider.fetchComplaints(city: nil, district: nil, limit: 50)
+                }
             } catch {
                 print("加载数据失败: \(error)")
             }
         }
     }
     
-    func loadLocalData(for city: String) {
-        Task {
-            do {
-                districts = try await dataProvider.fetchDistricts(city: city)
-                hotSpots = try await dataProvider.fetchHotSpots(city: city, district: nil)
+    func loadLocalData(for city: String) async {
+        do {
+            districts = try await dataProvider.fetchDistricts(city: city)
+            hotSpots = try await dataProvider.fetchHotSpots(city: city, district: nil)
+            complaints = try await dataProvider.fetchComplaints(city: city, district: nil, limit: 30)
+        } catch {
+            print("加载本地数据失败: \(error)")
+        }
+    }
+    
+    func refreshComplaints() async {
+        // 刷新缓存
+        MockMapDataProvider.shared.refreshData()
+        
+        do {
+            if viewMode == .local, let city = currentCity {
                 complaints = try await dataProvider.fetchComplaints(city: city, district: nil, limit: 30)
-            } catch {
-                print("加载本地数据失败: \(error)")
+            } else {
+                complaints = try await dataProvider.fetchComplaints(city: nil, district: nil, limit: 50)
             }
+        } catch {
+            print("刷新抱怨失败: \(error)")
         }
     }
     
     // MARK: - Location Updates
     func updateUserLocation(_ coordinate: CLLocationCoordinate2D, city: String?) {
         userCoordinate = coordinate
-        isLocating = false
         
-        // 检查是否在中国境内
-        let isInChina = isCoordinateInChina(coordinate)
-        
-        if let city = city, isInChina {
+        if let city = city, !city.isEmpty {
+            let oldCity = currentCity
             currentCity = city
-        } else if !isInChina {
-            // 不在中国，使用默认城市
-            currentCity = "北京"
-            userCoordinate = CLLocationCoordinate2D(latitude: 39.9042, longitude: 116.4074)
-        }
-        
-        // 如果是同城模式，自动加载本地数据
-        if viewMode == .local, let city = currentCity {
-            loadLocalData(for: city)
-            animateToCity(city)
+            
+            // 城市变化时加载新数据
+            if viewMode == .local && oldCity != city {
+                Task {
+                    await loadLocalData(for: city)
+                }
+            }
         }
     }
     
     func updateCurrentCity(_ city: String) {
-        guard currentCity != city else { return }
+        guard currentCity != city, !city.isEmpty else { return }
         currentCity = city
         
         if viewMode == .local {
-            loadLocalData(for: city)
+            Task {
+                await loadLocalData(for: city)
+            }
         }
     }
     
-    // 检查坐标是否在中国境内
-    private func isCoordinateInChina(_ coordinate: CLLocationCoordinate2D) -> Bool {
-        // 中国大致经纬度范围
-        let latRange = 18.0...54.0
-        let lonRange = 73.0...135.0
-        return latRange.contains(coordinate.latitude) && lonRange.contains(coordinate.longitude)
+    func setDefaultCity(_ city: String) {
+        currentCity = city
+        
+        // 查找城市坐标
+        if let config = MockMapDataProvider.cityConfigs.first(where: { $0.name == city }) {
+            userCoordinate = CLLocationCoordinate2D(latitude: config.lat, longitude: config.lon)
+            
+            if viewMode == .local {
+                animateToCity(city)
+                Task {
+                    await loadLocalData(for: city)
+                }
+            }
+        }
     }
     
     // MARK: - View Mode
@@ -478,35 +614,35 @@ class MapViewModel: ObservableObject {
             
         case .local:
             if let city = currentCity {
-                loadLocalData(for: city)
                 animateToCity(city)
+                Task {
+                    await loadLocalData(for: city)
+                }
+            } else if let coordinate = userCoordinate {
+                animateTo(coordinate, span: 0.15)
             } else {
-                // 没有城市信息，默认使用北京
-                currentCity = "北京"
-                loadLocalData(for: "北京")
-                animateToCity("北京")
+                // 没有位置，使用默认城市
+                setDefaultCity("北京")
             }
         }
     }
     
-    // 根据城市名定位
     func animateToCity(_ cityName: String) {
-        // 从配置中查找城市坐标
-        if let cityConfig = MockMapDataProvider.cityConfigs.first(where: { $0.name == cityName }) {
-            animateTo(CLLocationCoordinate2D(latitude: cityConfig.lat, longitude: cityConfig.lon), span: 0.15)
+        if let config = MockMapDataProvider.cityConfigs.first(where: { $0.name == cityName }) {
+            animateTo(CLLocationCoordinate2D(latitude: config.lat, longitude: config.lon), span: 0.12)
         } else if let coordinate = userCoordinate {
-            animateTo(coordinate, span: 0.15)
+            animateTo(coordinate, span: 0.12)
         }
     }
     
     // MARK: - Selection
     func selectCity(_ city: CityData) {
-        haptic(.light)
+        haptic(.medium)
         selectedCity = city
     }
     
     func selectDistrict(_ district: DistrictData) {
-        haptic(.light)
+        haptic(.medium)
         selectedDistrict = district
     }
     
@@ -524,7 +660,7 @@ class MapViewModel: ObservableObject {
     
     func animateToUserLocation() {
         guard let coordinate = userCoordinate else { return }
-        animateTo(coordinate, span: 0.15)
+        animateTo(coordinate, span: 0.12)
     }
     
     func animateTo(_ coordinate: CLLocationCoordinate2D, span: Double) {
@@ -573,7 +709,9 @@ struct CityMarkerView: View {
     @State private var isPressed = false
     
     var body: some View {
-        Button(action: onTap) {
+        Button(action: {
+            onTap()
+        }) {
             VStack(spacing: isCompact ? 2 : 4) {
                 ZStack {
                     Circle()
@@ -628,9 +766,12 @@ struct DistrictMarkerView: View {
     let onTap: () -> Void
     
     @State private var isAnimating = false
+    @State private var isPressed = false
     
     var body: some View {
-        Button(action: onTap) {
+        Button(action: {
+            onTap()
+        }) {
             VStack(spacing: 4) {
                 ZStack {
                     Circle()
@@ -656,9 +797,15 @@ struct DistrictMarkerView: View {
                     .padding(.vertical, 2)
                     .background(Capsule().fill(Color.black.opacity(0.7)))
             }
+            .scaleEffect(isPressed ? 0.9 : 1)
         }
         .buttonStyle(.plain)
         .onAppear { isAnimating = true }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in withAnimation(.easeInOut(duration: 0.1)) { isPressed = true } }
+                .onEnded { _ in withAnimation(.easeInOut(duration: 0.1)) { isPressed = false } }
+        )
     }
     
     private var statusColor: Color {
@@ -672,6 +819,7 @@ struct DistrictMarkerView: View {
 // MARK: - HotSpot Marker View
 struct HotSpotMarkerView: View {
     let spot: HotSpot
+    @State private var isPressed = false
     
     var body: some View {
         VStack(spacing: 2) {
@@ -693,6 +841,15 @@ struct HotSpotMarkerView: View {
                 .background(Color.orange.opacity(0.8))
                 .clipShape(RoundedRectangle(cornerRadius: 4))
         }
+        .scaleEffect(isPressed ? 0.9 : 1)
+        .onTapGesture {
+            haptic(.light)
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in withAnimation(.easeInOut(duration: 0.1)) { isPressed = true } }
+                .onEnded { _ in withAnimation(.easeInOut(duration: 0.1)) { isPressed = false } }
+        )
     }
 }
 
@@ -703,6 +860,7 @@ struct ComplaintCardView: View {
     @State private var playProgress: CGFloat = 0
     @State private var isLiked = false
     @State private var likesCount: Int = 0
+    @State private var isPressed = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -796,8 +954,8 @@ struct ComplaintCardView: View {
                 
                 // 评论按钮
                 Button {
-                    // TODO: 打开评论
                     haptic(.light)
+                    // TODO: 打开评论
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "bubble.left")
@@ -826,19 +984,23 @@ struct ComplaintCardView: View {
         }
         .background(Color(hex: "2C2C2E"))
         .clipShape(RoundedRectangle(cornerRadius: 16))
+        .scaleEffect(isPressed ? 0.98 : 1)
         .onAppear {
             likesCount = complaint.likes
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in withAnimation(.easeInOut(duration: 0.1)) { isPressed = true } }
+                .onEnded { _ in withAnimation(.easeInOut(duration: 0.1)) { isPressed = false } }
+        )
     }
     
     private func toggleLike() {
-        haptic(.light)
+        haptic(.medium)
         withAnimation(.spring(response: 0.3)) {
             isLiked.toggle()
             likesCount += isLiked ? 1 : -1
         }
-        
-        // TODO: 调用 API
     }
     
     private func timeAgo(_ date: Date) -> String {
@@ -927,10 +1089,8 @@ struct VoicePlayerBar: View {
         haptic(.light)
         
         if isPlaying {
-            // 暂停
             isPlaying = false
         } else {
-            // 播放
             isPlaying = true
             simulatePlayback()
         }
@@ -985,7 +1145,10 @@ struct CityDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                    Button("完成") {
+                        haptic(.light)
+                        dismiss()
+                    }
                 }
             }
         }
@@ -1117,7 +1280,10 @@ struct DistrictDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                    Button("完成") {
+                        haptic(.light)
+                        dismiss()
+                    }
                 }
             }
         }
