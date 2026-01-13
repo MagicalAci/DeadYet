@@ -412,7 +412,8 @@ export class DataGenerationService {
     console.log(`开始生成 ${count} 条抱怨...`)
     
     // 获取所有用户
-    const allUsers = await db.select({ id: users.id, city: users.city, district: users.district })
+    if (!db) throw new Error('数据库未配置')
+    const allUsers: any[] = await db.select({ id: users.id, city: users.city, district: users.district })
       .from(users)
       .limit(100000)
     
@@ -490,13 +491,14 @@ export class DataGenerationService {
     console.log('开始生成评论...')
     
     // 获取所有需要生成评论的抱怨
-    const allComplaints = await db.select({
+    if (!db) throw new Error('数据库未配置')
+    const allComplaints: any[] = await db.select({
       id: complaints.id,
       commentsCount: complaints.commentsCount,
       createdAt: complaints.createdAt
     }).from(complaints).limit(50000)
     
-    const allUsers = await db.select({ id: users.id })
+    const allUsers: any[] = await db.select({ id: users.id })
       .from(users)
       .limit(100000)
     
