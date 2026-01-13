@@ -13,7 +13,6 @@ struct MapView: View {
     @State private var cityStats: [CityStats] = []
     @State private var complaints: [Complaint] = []
     @State private var selectedCity: CityStats?
-    @State private var showComplaintSheet: Bool = false
     @State private var mapCameraPosition: MapCameraPosition = .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
@@ -21,16 +20,15 @@ struct MapView: View {
         )
     )
     
-    // 用于缩放控制
-    @State private var zoomLevel: Double = 30
-    private let mapCenter = CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0)
+    // 抱怨墙展开/收起状态
+    @State private var isComplaintWallExpanded = true
     
     var body: some View {
         ZStack(alignment: .bottom) {
-            // 地图
+            // 地图 - 全屏显示
             mapContent
             
-            // 底部抱怨墙
+            // 底部抱怨墙 - 可收起
             complaintWall
         }
         .onAppear {
@@ -45,158 +43,115 @@ struct MapView: View {
     
     // MARK: - Map Content
     private var mapContent: some View {
-        ZStack(alignment: .topTrailing) {
-            Map(position: $mapCameraPosition) {
-                ForEach(cityStats) { city in
-                    Annotation(city.city, coordinate: CLLocationCoordinate2D(latitude: city.latitude, longitude: city.longitude)) {
-                        CityMarkerButton(city: city) {
-                            selectedCity = city
-                        }
+        Map(position: $mapCameraPosition, interactionModes: .all) {
+            ForEach(cityStats) { city in
+                Annotation(city.city, coordinate: CLLocationCoordinate2D(latitude: city.latitude, longitude: city.longitude)) {
+                    CityMarkerButton(city: city) {
+                        selectedCity = city
                     }
                 }
             }
-            .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
-            .mapControls {
-                MapCompass()
-                MapScaleView()
-            }
-            .ignoresSafeArea(edges: .top)
-            
-            // 缩放控制按钮
-            VStack(spacing: 0) {
-                // 放大按钮
-                Button {
-                    zoomIn()
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.primary)
-                        .frame(width: 44, height: 44)
-                }
-                
-                Divider()
-                    .frame(width: 30)
-                
-                // 缩小按钮
-                Button {
-                    zoomOut()
-                } label: {
-                    Image(systemName: "minus")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.primary)
-                        .frame(width: 44, height: 44)
-                }
-                
-                Divider()
-                    .frame(width: 30)
-                
-                // 重置按钮
-                Button {
-                    resetMapPosition()
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.primary)
-                        .frame(width: 44, height: 44)
-                }
-            }
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .shadow(color: .black.opacity(0.15), radius: 5, x: 0, y: 2)
-            .padding(.top, 60)
-            .padding(.trailing, 12)
         }
+        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
+        .mapControls {
+            MapCompass()
+                .mapControlVisibility(.visible)
+            MapScaleView()
+            MapUserLocationButton()
+            MapPitchToggle()
+        }
+        .ignoresSafeArea(edges: .top)
     }
     
-    // MARK: - Map Controls
-    private func zoomIn() {
-        zoomLevel = max(zoomLevel / 2, 0.5)
-        withAnimation(.easeInOut(duration: 0.3)) {
-            mapCameraPosition = .region(MKCoordinateRegion(
-                center: mapCenter,
-                span: MKCoordinateSpan(latitudeDelta: zoomLevel, longitudeDelta: zoomLevel)
-            ))
-        }
-        haptic(.light)
-    }
-    
-    private func zoomOut() {
-        zoomLevel = min(zoomLevel * 2, 60)
-        withAnimation(.easeInOut(duration: 0.3)) {
-            mapCameraPosition = .region(MKCoordinateRegion(
-                center: mapCenter,
-                span: MKCoordinateSpan(latitudeDelta: zoomLevel, longitudeDelta: zoomLevel)
-            ))
-        }
-        haptic(.light)
-    }
-    
-    private func resetMapPosition() {
-        zoomLevel = 30
-        withAnimation(.easeInOut(duration: 0.5)) {
-            mapCameraPosition = .region(MKCoordinateRegion(
-                center: mapCenter,
-                span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
-            ))
-        }
-        haptic(.medium)
-    }
-    
-    // MARK: - Complaint Wall
+    // MARK: - Complaint Wall (可收起)
     private var complaintWall: some View {
         VStack(spacing: 0) {
-            // 头部
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("📢 实时抱怨墙")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
-                    
-                    Text("看看全国牛马都在骂什么")
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray)
-                }
+            // 拖拽指示器 + 头部
+            VStack(spacing: 0) {
+                // 拖拽条
+                Capsule()
+                    .fill(Color.white.opacity(0.3))
+                    .frame(width: 40, height: 5)
+                    .padding(.top, 10)
+                    .padding(.bottom, 8)
                 
-                Spacer()
-                
-                // 统计
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(totalCheckedIn)")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.aliveGreen)
-                    Text("已下班")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
-                }
-                
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(totalStillWorking)")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.deadRed)
-                    Text("还在苦")
-                        .font(.system(size: 10))
-                        .foregroundColor(.gray)
-                }
-                .padding(.leading, 16)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 12)
-            
-            Divider()
-                .background(Color.white.opacity(0.1))
-            
-            // 抱怨列表
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 12) {
-                    ForEach(complaints) { complaint in
-                        ComplaintCard(complaint: complaint)
+                // 头部
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("📢 实时抱怨墙")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                        
+                        Text("看看全国牛马都在骂什么")
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
                     }
+                    
+                    Spacer()
+                    
+                    // 统计
+                    HStack(spacing: 16) {
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(totalCheckedIn)")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.aliveGreen)
+                            Text("已下班")
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray)
+                        }
+                        
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text("\(totalStillWorking)")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.deadRed)
+                            Text("还在苦")
+                                .font(.system(size: 10))
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    
+                    // 展开/收起按钮
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            isComplaintWallExpanded.toggle()
+                        }
+                    } label: {
+                        Image(systemName: isComplaintWallExpanded ? "chevron.down" : "chevron.up")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .padding(.leading, 8)
                 }
                 .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.bottom, 12)
             }
-            .frame(height: 200)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    isComplaintWallExpanded.toggle()
+                }
+            }
+            
+            // 抱怨列表（可收起）
+            if isComplaintWallExpanded {
+                Divider()
+                    .background(Color.white.opacity(0.1))
+                
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 12) {
+                        ForEach(complaints) { complaint in
+                            ComplaintCard(complaint: complaint)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                }
+                .frame(height: 180)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
@@ -205,7 +160,8 @@ struct MapView: View {
                 .stroke(Color.white.opacity(0.1), lineWidth: 1)
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, 100)
+        .padding(.bottom, 90)
+        .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: -5)
     }
     
     // MARK: - Computed Properties
@@ -224,12 +180,13 @@ struct MapView: View {
     }
 }
 
-// MARK: - City Marker Button (解决点击问题)
+// MARK: - City Marker Button
 struct CityMarkerButton: View {
     let city: CityStats
     let onTap: () -> Void
     
     @State private var isAnimating: Bool = false
+    @State private var isPressed: Bool = false
     
     var body: some View {
         Button(action: {
@@ -242,34 +199,50 @@ struct CityMarkerButton: View {
                     // 脉冲动画
                     Circle()
                         .fill(statusColor.opacity(0.3))
-                        .frame(width: isAnimating ? 50 : 30, height: isAnimating ? 50 : 30)
+                        .frame(width: isAnimating ? 45 : 28, height: isAnimating ? 45 : 28)
                         .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
                     
                     Circle()
                         .fill(statusColor)
-                        .frame(width: 24, height: 24)
+                        .frame(width: 22, height: 22)
+                        .shadow(color: statusColor.opacity(0.5), radius: 4)
                     
                     Text("\(city.checkedIn)")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 7, weight: .bold))
                         .foregroundColor(.white)
                 }
                 
                 // 城市名称
                 Text(city.city)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 6)
+                    .padding(.horizontal, 5)
                     .padding(.vertical, 2)
                     .background(
                         Capsule()
                             .fill(.ultraThinMaterial)
+                            .shadow(color: .black.opacity(0.2), radius: 2)
                     )
             }
+            .scaleEffect(isPressed ? 0.9 : 1)
         }
         .buttonStyle(.plain)
         .onAppear {
             isAnimating = true
         }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        isPressed = true
+                    }
+                }
+                .onEnded { _ in
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        isPressed = false
+                    }
+                }
+        )
     }
     
     private var statusColor: Color {
@@ -310,7 +283,7 @@ struct ComplaintCard: View {
                 Text(complaint.content)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white)
-                    .lineLimit(3)
+                    .lineLimit(2)
                 
                 // 互动数据
                 HStack(spacing: 16) {
