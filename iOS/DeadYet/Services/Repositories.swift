@@ -1,0 +1,584 @@
+//
+//  Repositories.swift
+//  DeadYet - 还没死？
+//
+//  数据仓库层 - 统一数据访问
+//
+
+import Foundation
+import CoreLocation
+
+// MARK: - ==================== API 客户端 ====================
+
+@MainActor
+class APIClient {
+    static let shared = APIClient()
+    
+    private let session: URLSession
+    private let baseURL: String
+    
+    private init() {
+        self.baseURL = AppConfig.shared.apiBaseURL
+        
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = AppConfig.shared.apiTimeout
+        self.session = URLSession(configuration: config)
+    }
+    
+    func request<T: Decodable>(
+        _ type: T.Type,
+        path: String,
+        method: String = "GET",
+        body: Encodable? = nil,
+        queryItems: [URLQueryItem]? = nil
+    ) async throws -> T {
+        var urlComponents = URLComponents(string: baseURL + path)!
+        urlComponents.queryItems = queryItems
+        
+        guard let url = urlComponents.url else {
+            throw AppError.network(.invalidURL)
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let token = StorageManager.shared.authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        
+        if let body = body {
+            request.httpBody = try JSONEncoder().encode(body)
+        }
+        
+        Logger.debug("🌐 \(method) \(path)")
+        
+        let (data, response) = try await session.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError.network(.invalidResponse)
+        }
+        
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw AppError.network(.serverError(httpResponse.statusCode, nil))
+        }
+        
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+    
+    func get<T: Decodable>(_ type: T.Type, path: String, queryItems: [URLQueryItem]? = nil) async throws -> T {
+        try await request(type, path: path, method: "GET", queryItems: queryItems)
+    }
+    
+    func post<T: Decodable>(_ type: T.Type, path: String, body: Encodable? = nil) async throws -> T {
+        try await request(type, path: path, method: "POST", body: body)
+    }
+}
+
+// MARK: - ==================== DTO 模型 ====================
+
+struct AuthRequestDTO: Encodable {
+    let email: String
+}
+
+struct AuthResponseDTO: Decodable {
+    let success: Bool
+    let message: String
+    let user: UserDTO?
+    let token: String?
+}
+
+struct UserDTO: Codable {
+    let id: String
+    let email: String
+    let nickname: String?
+    let avatarEmoji: String?
+    let survivalDays: Int?
+    let totalCheckIns: Int?
+    let currentStreak: Int?
+    let longestStreak: Int?
+    let city: String?
+    let district: String?
+    let createdAt: String?
+    let lastCheckIn: String?
+}
+
+struct CheckInRequestDTO: Encodable {
+    let userId: String
+    let complaint: String?
+    let mood: String
+    let city: String?
+    let district: String?
+}
+
+struct CheckInResponseDTO: Decodable {
+    let success: Bool
+    let message: String
+    let record: CheckInRecordDTO?
+    let survivalDays: Int?
+    let aiResponse: String?
+}
+
+struct CheckInRecordDTO: Decodable {
+    let id: String
+    let checkInTime: String
+    let complaint: String?
+    let aiResponse: String?
+    let mood: String?
+    let bannerGenerated: Bool?
+}
+
+struct ComplaintsResponseDTO: Decodable {
+    let success: Bool
+    let complaints: [ComplaintDTO]?
+    let total: Int?
+}
+
+struct ComplaintDTO: Decodable {
+    let id: String
+    let userNickname: String?
+    let userEmoji: String?
+    let contentType: String?
+    let content: String?
+    let voiceUrl: String?
+    let voiceDuration: Int?
+    let category: String?
+    let city: String?
+    let district: String?
+    let latitude: Double?
+    let longitude: Double?
+    let likes: Int?
+    let comments: Int?
+    let createdAt: String?
+}
+
+struct MapStatsResponseDTO: Decodable {
+    let success: Bool
+    let cities: [CityDTO]?
+}
+
+struct CityDTO: Decodable {
+    let id: String?
+    let name: String?
+    let city: String?
+    let province: String?
+    let tier: Int?
+    let latitude: Double?
+    let longitude: Double?
+    let totalWorkers: Int?
+    let checkedIn: Int?
+    let stillWorking: Int?
+    let averageCheckOutTime: String?
+}
+
+struct DistrictDTO: Decodable {
+    let id: String?
+    let city: String?
+    let name: String?
+    let district: String?
+    let latitude: Double?
+    let longitude: Double?
+    let totalWorkers: Int?
+    let checkedIn: Int?
+    let stillWorking: Int?
+}
+
+struct HotSpotDTO: Decodable {
+    let id: String?
+    let name: String?
+    let type: String?
+    let city: String?
+    let district: String?
+    let latitude: Double?
+    let longitude: Double?
+    let totalWorkers: Int?
+    let checkedIn: Int?
+    let stillWorking: Int?
+    let tags: [String]?
+}
+
+// MARK: - ==================== 用户仓库 ====================
+
+@MainActor
+class UserRepository: ObservableObject {
+    static let shared = UserRepository()
+    
+    private let api = APIClient.shared
+    private let storage = StorageManager.shared
+    
+    @Published private(set) var currentUser: User?
+    @Published private(set) var isLoading = false
+    
+    private init() {
+        currentUser = storage.get(User.self, forKey: StorageKeys.currentUser)
+    }
+    
+    func login(email: String) async throws -> User {
+        guard isValidEmail(email) else {
+            throw AppError.auth(.invalidEmail)
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        // Mock 模式
+        if AppConfig.shared.enableMockData {
+            try await Task.sleep(nanoseconds: 500_000_000)
+            
+            var user = User(email: email)
+            user.survivalDays = 1
+            user.city = "北京"
+            user.district = "海淀区"
+            
+            storage.set(user, forKey: StorageKeys.currentUser)
+            currentUser = user
+            return user
+        }
+        
+        // 真实 API
+        let response: AuthResponseDTO = try await api.post(
+            AuthResponseDTO.self,
+            path: APIEndpoints.authEmail,
+            body: AuthRequestDTO(email: email)
+        )
+        
+        guard response.success, let dto = response.user else {
+            throw AppError.auth(.invalidCredentials)
+        }
+        
+        let user = User(
+            id: dto.id,
+            email: dto.email,
+            nickname: dto.nickname,
+            avatarEmoji: dto.avatarEmoji ?? "🐂",
+            survivalDays: dto.survivalDays ?? 0,
+            totalCheckIns: dto.totalCheckIns ?? 0,
+            currentStreak: dto.currentStreak ?? 0,
+            longestStreak: dto.longestStreak ?? 0,
+            city: dto.city,
+            district: dto.district
+        )
+        
+        if let token = response.token {
+            storage.authToken = token
+        }
+        
+        storage.set(user, forKey: StorageKeys.currentUser)
+        currentUser = user
+        
+        return user
+    }
+    
+    func checkIn(complaint: String?, mood: CheckInRecord.Mood, city: String?, district: String?) async throws -> CheckInRecord {
+        guard var user = currentUser else {
+            throw AppError.auth(.notLoggedIn)
+        }
+        
+        if storage.hasCheckedInToday {
+            throw AppError.business(.alreadyCheckedIn)
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        // Mock 模式
+        if AppConfig.shared.enableMockData {
+            try await Task.sleep(nanoseconds: 300_000_000)
+            
+            var record = CheckInRecord(userId: user.id, complaint: complaint, mood: mood)
+            record.aiResponse = generateMockAIResponse(for: complaint)
+            record.bannerGenerated = true
+            
+            user.survivalDays += 1
+            user.totalCheckIns += 1
+            user.currentStreak += 1
+            user.longestStreak = max(user.longestStreak, user.currentStreak)
+            user.lastCheckIn = Date()
+            
+            storage.set(user, forKey: StorageKeys.currentUser)
+            storage.lastCheckInDate = Date()
+            currentUser = user
+            
+            return record
+        }
+        
+        // 真实 API
+        let request = CheckInRequestDTO(
+            userId: user.id,
+            complaint: complaint,
+            mood: mood.rawValue,
+            city: city,
+            district: district
+        )
+        
+        let response: CheckInResponseDTO = try await api.post(
+            CheckInResponseDTO.self,
+            path: APIEndpoints.checkIn,
+            body: request
+        )
+        
+        guard response.success, let dto = response.record else {
+            throw AppError.business(.checkInFailed)
+        }
+        
+        var record = CheckInRecord(
+            id: dto.id,
+            userId: user.id,
+            checkInTime: dto.checkInTime.toDate() ?? Date(),
+            complaint: dto.complaint,
+            aiResponse: response.aiResponse ?? dto.aiResponse,
+            mood: CheckInRecord.Mood(rawValue: dto.mood ?? "") ?? .neutral,
+            bannerGenerated: dto.bannerGenerated ?? false
+        )
+        
+        user.survivalDays = response.survivalDays ?? (user.survivalDays + 1)
+        user.totalCheckIns += 1
+        user.currentStreak += 1
+        user.longestStreak = max(user.longestStreak, user.currentStreak)
+        user.lastCheckIn = Date()
+        
+        storage.set(user, forKey: StorageKeys.currentUser)
+        storage.lastCheckInDate = Date()
+        currentUser = user
+        
+        return record
+    }
+    
+    func logout() {
+        storage.clearAll()
+        currentUser = nil
+    }
+    
+    private func isValidEmail(_ email: String) -> Bool {
+        let regex = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
+        return NSPredicate(format: "SELF MATCHES %@", regex).evaluate(with: email)
+    }
+    
+    private func generateMockAIResponse(for complaint: String?) -> String {
+        guard let complaint = complaint, !complaint.isEmpty else {
+            return ["行，今天又没死，恭喜你👏", "又苟过一天，明天继续！", "没抱怨？装什么坚强呢？"].randomElement()!
+        }
+        
+        if complaint.contains("加班") {
+            return "又加班？你这是打工还是卖身？加班费呢？没有？那你加个屁！"
+        }
+        if complaint.contains("领导") || complaint.contains("老板") {
+            return "你领导是不是脑子有坑？这种傻逼领导全国多了去了，你不走他走不了，懂？"
+        }
+        if complaint.contains("工资") || complaint.contains("钱") {
+            return "就这点钱你还干？我真服了你这种老实人。穷是暂时的，被压榨是持久的。"
+        }
+        
+        return ["就这？我听过比这惨十倍的。继续苟着吧。", "恭喜你没猝死，这就是你今天最大的成就。", "职场没有朋友，只有利益。清醒点。"].randomElement()!
+    }
+}
+
+// MARK: - ==================== 地图仓库 ====================
+
+@MainActor
+class MapRepository: ObservableObject {
+    static let shared = MapRepository()
+    
+    private let api = APIClient.shared
+    private let cache = CacheManager.shared
+    
+    private init() {}
+    
+    func fetchAllCities() async throws -> [City] {
+        if let cached = cache.get([City].self, forKey: "cities", maxAge: 300) {
+            return cached
+        }
+        
+        if AppConfig.shared.enableMockData {
+            try await Task.sleep(nanoseconds: 200_000_000)
+            let cities = MockMapData.generateCities()
+            cache.set(cities, forKey: "cities")
+            return cities
+        }
+        
+        let response: MapStatsResponseDTO = try await api.get(
+            MapStatsResponseDTO.self,
+            path: APIEndpoints.mapCities
+        )
+        
+        let cities = response.cities?.map { dto in
+            City(
+                name: dto.name ?? dto.city ?? "",
+                province: dto.province ?? "",
+                tier: dto.tier ?? 3,
+                latitude: dto.latitude ?? 0,
+                longitude: dto.longitude ?? 0,
+                totalWorkers: dto.totalWorkers ?? 0,
+                checkedIn: dto.checkedIn ?? 0,
+                stillWorking: dto.stillWorking ?? 0,
+                averageCheckOutTime: dto.averageCheckOutTime
+            )
+        } ?? []
+        
+        cache.set(cities, forKey: "cities")
+        return cities
+    }
+    
+    func fetchDistricts(city: String) async throws -> [District] {
+        let cacheKey = "districts_\(city)"
+        
+        if let cached = cache.get([District].self, forKey: cacheKey, maxAge: 300) {
+            return cached
+        }
+        
+        if AppConfig.shared.enableMockData {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            let districts = MockMapData.generateDistricts(for: city)
+            cache.set(districts, forKey: cacheKey)
+            return districts
+        }
+        
+        struct Response: Decodable { let data: [DistrictDTO]? }
+        let response: Response = try await api.get(Response.self, path: APIEndpoints.mapDistricts(city))
+        
+        let districts = response.data?.map { dto in
+            District(
+                city: dto.city ?? city,
+                name: dto.name ?? dto.district ?? "",
+                latitude: dto.latitude ?? 0,
+                longitude: dto.longitude ?? 0,
+                totalWorkers: dto.totalWorkers ?? 0,
+                checkedIn: dto.checkedIn ?? 0,
+                stillWorking: dto.stillWorking ?? 0
+            )
+        } ?? []
+        
+        cache.set(districts, forKey: cacheKey)
+        return districts
+    }
+    
+    func fetchHotSpots(city: String, district: String?) async throws -> [HotSpot] {
+        let cacheKey = "hotspots_\(city)"
+        
+        if let cached = cache.get([HotSpot].self, forKey: cacheKey, maxAge: 300) {
+            if let district = district {
+                return cached.filter { $0.district == district }
+            }
+            return cached
+        }
+        
+        if AppConfig.shared.enableMockData {
+            let hotSpots = MockMapData.generateHotSpots(city: city)
+            cache.set(hotSpots, forKey: cacheKey)
+            if let district = district {
+                return hotSpots.filter { $0.district == district }
+            }
+            return hotSpots
+        }
+        
+        struct Response: Decodable { let data: [HotSpotDTO]? }
+        let response: Response = try await api.get(Response.self, path: APIEndpoints.mapHotSpots(city))
+        
+        let hotSpots = response.data?.map { dto in
+            HotSpot(
+                name: dto.name ?? "",
+                type: HotSpot.SpotType(rawValue: dto.type ?? "") ?? .office,
+                latitude: dto.latitude ?? 0,
+                longitude: dto.longitude ?? 0,
+                city: dto.city ?? city,
+                district: dto.district ?? "",
+                totalWorkers: dto.totalWorkers ?? 0,
+                checkedIn: dto.checkedIn ?? 0,
+                stillWorking: dto.stillWorking ?? 0,
+                tags: dto.tags ?? []
+            )
+        } ?? []
+        
+        cache.set(hotSpots, forKey: cacheKey)
+        return hotSpots
+    }
+    
+    func refresh() {
+        cache.remove(forKey: "cities")
+    }
+}
+
+// MARK: - ==================== 抱怨仓库 ====================
+
+@MainActor
+class ComplaintRepository: ObservableObject {
+    static let shared = ComplaintRepository()
+    
+    private let api = APIClient.shared
+    private let cache = CacheManager.shared
+    
+    private init() {}
+    
+    func fetchComplaints(city: String?, district: String?, limit: Int = 50) async throws -> [Complaint] {
+        let cacheKey = city != nil ? "complaints_\(city!)" : "complaints"
+        
+        if let cached = cache.get([Complaint].self, forKey: cacheKey, maxAge: 120) {
+            return cached
+        }
+        
+        if AppConfig.shared.enableMockData {
+            try await Task.sleep(nanoseconds: 200_000_000)
+            var complaints = MockComplaintData.generate()
+            if let city = city {
+                complaints = complaints.filter { $0.city == city }
+            }
+            cache.set(complaints, forKey: cacheKey)
+            return Array(complaints.prefix(limit))
+        }
+        
+        var queryItems = [URLQueryItem(name: "limit", value: "\(limit)")]
+        if let city = city { queryItems.append(URLQueryItem(name: "city", value: city)) }
+        if let district = district { queryItems.append(URLQueryItem(name: "district", value: district)) }
+        
+        let response: ComplaintsResponseDTO = try await api.get(
+            ComplaintsResponseDTO.self,
+            path: APIEndpoints.complaints,
+            queryItems: queryItems
+        )
+        
+        let complaints = response.complaints?.map { dto in
+            Complaint(
+                id: dto.id,
+                userId: "",
+                userNickname: dto.userNickname,
+                userEmoji: dto.userEmoji ?? "🐂",
+                contentType: Complaint.ContentType(rawValue: dto.contentType ?? "text") ?? .text,
+                content: dto.content,
+                voiceUrl: dto.voiceUrl,
+                voiceDuration: dto.voiceDuration ?? 0,
+                latitude: dto.latitude ?? 0,
+                longitude: dto.longitude ?? 0,
+                city: dto.city,
+                district: dto.district,
+                category: Complaint.Category(rawValue: dto.category ?? "") ?? .general,
+                createdAt: dto.createdAt?.toDate() ?? Date(),
+                likes: dto.likes ?? 0,
+                comments: dto.comments ?? 0
+            )
+        } ?? []
+        
+        cache.set(complaints, forKey: cacheKey)
+        return complaints
+    }
+    
+    func refresh() {
+        cache.remove(forKey: "complaints")
+    }
+}
+
+// MARK: - ==================== 依赖容器 ====================
+
+@MainActor
+class DependencyContainer: ObservableObject {
+    static let shared = DependencyContainer()
+    
+    lazy var users = UserRepository.shared
+    lazy var map = MapRepository.shared
+    lazy var complaints = ComplaintRepository.shared
+    
+    private init() {
+        Logger.info("DependencyContainer 初始化")
+        Logger.info("环境: \(AppConfig.shared.environment.rawValue)")
+        Logger.info("Mock模式: \(AppConfig.shared.enableMockData)")
+    }
+}

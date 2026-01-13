@@ -1,93 +1,155 @@
 /**
  * 认证路由
- * 
- * 只需要邮箱，无需注册
  */
 
 import { Hono } from 'hono'
-import { zValidator } from '@hono/zod-validator'
-import { z } from 'zod'
+import userService from '../services/userService.js'
 
 const auth = new Hono()
 
-// 邮箱验证Schema
-const emailSchema = z.object({
-  email: z.string().email('邮箱格式不对，你是不是傻？'),
-})
-
 // 邮箱登录/注册
-auth.post('/email', zValidator('json', emailSchema), async (c) => {
-  const { email } = c.req.valid('json')
-  
-  // TODO: 从数据库查询或创建用户
-  // const user = await db.query.users.findFirst({ where: eq(users.email, email) })
-  // if (!user) {
-  //   user = await db.insert(users).values({ email }).returning()
-  // }
-  
-  // 临时返回模拟数据
-  const user = {
-    id: 'user-' + Date.now(),
-    email,
-    nickname: null,
-    avatarEmoji: '🐂',
-    survivalDays: 1,
-    totalCheckIns: 0,
-    currentStreak: 0,
-    longestStreak: 0,
-    city: null,
-    district: null,
-    createdAt: new Date().toISOString(),
-    lastCheckIn: null,
-    bannerLevel: 'freshLeek',
+auth.post('/email', async (c) => {
+  try {
+    const { email } = await c.req.json()
+    
+    if (!email) {
+      return c.json({
+        success: false,
+        error: '邮箱呢？填一下',
+      }, 400)
+    }
+    
+    // 验证邮箱格式
+    const emailRegex = /^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}$/
+    if (!emailRegex.test(email)) {
+      return c.json({
+        success: false,
+        error: '邮箱格式不对，你是不是傻？',
+      }, 400)
+    }
+    
+    const { user, isNew } = await userService.loginWithEmail(email)
+    
+    return c.json({
+      success: true,
+      message: isNew ? '欢迎加入牛马大军！' : '又来打卡了？真是敬业！',
+      user: {
+        id: user.id,
+        email: user.email,
+        nickname: user.nickname,
+        avatarEmoji: user.avatarEmoji,
+        survivalDays: user.survivalDays,
+        totalCheckIns: user.totalCheckIns,
+        currentStreak: user.currentStreak,
+        longestStreak: user.longestStreak,
+        city: user.city,
+        district: user.district,
+        createdAt: user.createdAt?.toISOString(),
+        lastCheckIn: user.lastCheckIn?.toISOString(),
+      },
+      // TODO: 生成 JWT token
+      token: null,
+    })
+    
+  } catch (error) {
+    console.error('登录失败:', error)
+    return c.json({
+      success: false,
+      error: '登录失败',
+      message: (error as Error).message,
+    }, 500)
   }
-  
-  return c.json({
-    success: true,
-    message: '欢迎加入牛马大军',
-    user,
-  })
 })
 
 // 获取用户信息
-auth.get('/me', async (c) => {
-  const authHeader = c.req.header('Authorization')
-  
-  if (!authHeader) {
+auth.get('/profile', async (c) => {
+  try {
+    const userId = c.req.header('X-User-Id')
+    
+    if (!userId) {
+      return c.json({
+        success: false,
+        error: '未提供用户ID',
+      }, 401)
+    }
+    
+    const user = await userService.getUser(userId)
+    
+    if (!user) {
+      return c.json({
+        success: false,
+        error: '用户不存在',
+      }, 404)
+    }
+    
     return c.json({
-      error: '还没登录呢',
-      message: '先输入你的工作邮箱',
-    }, 401)
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        nickname: user.nickname,
+        avatarEmoji: user.avatarEmoji,
+        survivalDays: user.survivalDays,
+        totalCheckIns: user.totalCheckIns,
+        currentStreak: user.currentStreak,
+        longestStreak: user.longestStreak,
+        city: user.city,
+        district: user.district,
+        createdAt: user.createdAt?.toISOString(),
+        lastCheckIn: user.lastCheckIn?.toISOString(),
+      },
+    })
+    
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
+    return c.json({
+      success: false,
+      error: '获取用户信息失败',
+    }, 500)
   }
-  
-  // TODO: 验证token并返回用户信息
-  
-  return c.json({
-    id: 'user-123',
-    email: 'test@company.com',
-    survivalDays: 47,
-  })
 })
 
 // 更新用户信息
-auth.put('/me', async (c) => {
-  const body = await c.req.json()
-  
-  // TODO: 更新用户信息
-  
-  return c.json({
-    success: true,
-    message: '信息已更新，虽然没什么卵用',
-  })
-})
-
-// 登出
-auth.post('/logout', async (c) => {
-  return c.json({
-    success: true,
-    message: '走了？明天还得来',
-  })
+auth.put('/profile', async (c) => {
+  try {
+    const userId = c.req.header('X-User-Id')
+    
+    if (!userId) {
+      return c.json({
+        success: false,
+        error: '未提供用户ID',
+      }, 401)
+    }
+    
+    const data = await c.req.json()
+    
+    const user = await userService.updateUser(userId, {
+      nickname: data.nickname,
+      avatarEmoji: data.avatarEmoji,
+      city: data.city,
+      district: data.district,
+    })
+    
+    if (!user) {
+      return c.json({
+        success: false,
+        error: '用户不存在',
+      }, 404)
+    }
+    
+    return c.json({
+      success: true,
+      message: '更新成功',
+      user,
+    })
+    
+  } catch (error) {
+    console.error('更新用户信息失败:', error)
+    return c.json({
+      success: false,
+      error: '更新失败',
+    }, 500)
+  }
 })
 
 export default auth
-

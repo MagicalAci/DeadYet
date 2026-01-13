@@ -27,6 +27,10 @@
 		A1000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000019 /* Assets.xcassets */; };
 		A1000020 /* PermissionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000020 /* PermissionsView.swift */; };
 		A1000021 /* MapModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000021 /* MapModels.swift */; };
+		A1000022 /* AppCore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000022 /* AppCore.swift */; };
+		A1000023 /* Repositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000023 /* Repositories.swift */; };
+		A1000024 /* MockData.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000024 /* MockData.swift */; };
+		A1000025 /* DomainModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000025 /* DomainModels.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -52,6 +56,10 @@
 		B1000019 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B1000020 /* PermissionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionsView.swift; sourceTree = "<group>"; };
 		B1000021 /* MapModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapModels.swift; sourceTree = "<group>"; };
+		B1000022 /* AppCore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCore.swift; sourceTree = "<group>"; };
+		B1000023 /* Repositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Repositories.swift; sourceTree = "<group>"; };
+		B1000024 /* MockData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockData.swift; sourceTree = "<group>"; };
+		B1000025 /* DomainModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DomainModels.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				D0000003 /* App */,
+				D0000015 /* Core */,
 				D0000004 /* Views */,
 				D0000005 /* Models */,
 				D0000006 /* Services */,
@@ -113,6 +122,7 @@
 			children = (
 				B1000003 /* User.swift */,
 				B1000021 /* MapModels.swift */,
+				B1000025 /* DomainModels.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -125,6 +135,8 @@
 				B1000006 /* LocationService.swift */,
 				B1000007 /* SpeechService.swift */,
 				B1000008 /* NotificationService.swift */,
+				B1000023 /* Repositories.swift */,
+				B1000024 /* MockData.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -187,6 +199,14 @@
 				B1000016 /* LaunchScreenView.swift */,
 			);
 			path = LaunchScreen;
+			sourceTree = "<group>";
+		};
+		D0000015 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				B1000022 /* AppCore.swift */,
+			);
+			path = Core;
 			sourceTree = "<group>";
 		};
 		D0000099 /* Products */ = {
@@ -286,6 +306,10 @@
 				A1000016 /* LaunchScreenView.swift in Sources */,
 				A1000020 /* PermissionsView.swift in Sources */,
 				A1000021 /* MapModels.swift in Sources */,
+				A1000022 /* AppCore.swift in Sources */,
+				A1000023 /* Repositories.swift in Sources */,
+				A1000024 /* MockData.swift in Sources */,
+				A1000025 /* DomainModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
