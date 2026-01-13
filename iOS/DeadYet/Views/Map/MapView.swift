@@ -14,12 +14,11 @@ struct MapView: View {
     @State private var complaints: [Complaint] = []
     @State private var selectedCity: CityStats?
     @State private var showComplaintSheet: Bool = false
-    @State private var mapCameraPosition: MapCameraPosition = .region(
-        MKCoordinateRegion(
-            center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
-            span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
-        )
+    @State private var currentRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
+        span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
     )
+    @State private var mapCameraPosition: MapCameraPosition = .automatic
     
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -31,6 +30,7 @@ struct MapView: View {
         }
         .onAppear {
             loadMockData()
+            mapCameraPosition = .region(currentRegion)
         }
         .sheet(isPresented: $showComplaintSheet) {
             if let city = selectedCity {
@@ -113,37 +113,36 @@ struct MapView: View {
     
     // MARK: - Map Controls
     private func zoomIn() {
-        guard case let .region(region) = mapCameraPosition else { return }
         let newSpan = MKCoordinateSpan(
-            latitudeDelta: max(region.span.latitudeDelta / 2, 0.5),
-            longitudeDelta: max(region.span.longitudeDelta / 2, 0.5)
+            latitudeDelta: max(currentRegion.span.latitudeDelta / 2, 0.5),
+            longitudeDelta: max(currentRegion.span.longitudeDelta / 2, 0.5)
         )
+        currentRegion = MKCoordinateRegion(center: currentRegion.center, span: newSpan)
         withAnimation(.easeInOut(duration: 0.3)) {
-            mapCameraPosition = .region(MKCoordinateRegion(center: region.center, span: newSpan))
+            mapCameraPosition = .region(currentRegion)
         }
         haptic(.light)
     }
     
     private func zoomOut() {
-        guard case let .region(region) = mapCameraPosition else { return }
         let newSpan = MKCoordinateSpan(
-            latitudeDelta: min(region.span.latitudeDelta * 2, 60),
-            longitudeDelta: min(region.span.longitudeDelta * 2, 60)
+            latitudeDelta: min(currentRegion.span.latitudeDelta * 2, 60),
+            longitudeDelta: min(currentRegion.span.longitudeDelta * 2, 60)
         )
+        currentRegion = MKCoordinateRegion(center: currentRegion.center, span: newSpan)
         withAnimation(.easeInOut(duration: 0.3)) {
-            mapCameraPosition = .region(MKCoordinateRegion(center: region.center, span: newSpan))
+            mapCameraPosition = .region(currentRegion)
         }
         haptic(.light)
     }
     
     private func resetMapPosition() {
+        currentRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
+            span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
+        )
         withAnimation(.easeInOut(duration: 0.5)) {
-            mapCameraPosition = .region(
-                MKCoordinateRegion(
-                    center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
-                    span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
-                )
-            )
+            mapCameraPosition = .region(currentRegion)
         }
         haptic(.medium)
     }
