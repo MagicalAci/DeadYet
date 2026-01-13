@@ -1,12 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/zeabur.json",
   "build_command": "npm install && npm run build",
-  "start_command": "npm start",
+  "start_command": "node dist/index.js",
   "output_dir": "dist",
-  "watch_paths": [
-    "src/**/*",
-    "package.json"
-  ],
   "serverless": false,
   "env": {
     "NODE_ENV": "production",
