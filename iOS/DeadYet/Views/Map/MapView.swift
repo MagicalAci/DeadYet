@@ -59,13 +59,6 @@ struct MapView: View {
                 handleFirstLocation(location)
             }
         }
-        // 监听定位错误（如不在中国）
-        .onChange(of: locationService.locationError) { _, error in
-            if error == .notInChina {
-                // 不在中国，使用北京作为默认城市
-                viewModel.setDefaultCity("北京")
-            }
-        }
         // 城市详情
         .sheet(item: $viewModel.selectedCity) { city in
             CityDetailSheet(city: city, dataProvider: viewModel.dataProvider)
@@ -407,14 +400,33 @@ struct MapView: View {
     private func handleLocationUpdate(_ location: CLLocation?) {
         guard let location = location else { return }
         
-        viewModel.updateUserLocation(
-            location.coordinate,
-            city: locationService.currentCity
-        )
+        // 检查是否在中国境内
+        if locationService.isCoordinateInChina(location.coordinate) {
+            viewModel.updateUserLocation(
+                location.coordinate,
+                city: locationService.currentCity
+            )
+        } else {
+            // 不在中国，使用默认城市
+            print("📍 不在中国境内，使用默认城市")
+            if let city = locationService.currentCity {
+                viewModel.setDefaultCity(city)
+            } else {
+                viewModel.setDefaultCity("北京")
+            }
+        }
     }
     
     private func handleFirstLocation(_ location: CLLocation) {
         print("🎯 首次定位成功: \(location.coordinate)")
+        
+        // 检查是否在中国境内
+        if !locationService.isCoordinateInChina(location.coordinate) {
+            print("📍 首次定位不在中国，使用默认城市")
+            let city = locationService.currentCity ?? "北京"
+            viewModel.setDefaultCity(city)
+            return
+        }
         
         // 如果是同城模式，自动定位到用户位置
         if viewModel.viewMode == .local {
@@ -437,9 +449,17 @@ struct MapView: View {
     private func switchViewMode(to mode: MapViewModel.ViewMode) {
         viewModel.switchViewMode(to: mode)
         
-        // 切换到同城模式时，如果有真实位置就定位过去
-        if mode == .local, let location = locationService.currentLocation {
-            viewModel.updateUserLocation(location.coordinate, city: locationService.currentCity)
+        // 切换到同城模式时
+        if mode == .local {
+            if let location = locationService.currentLocation,
+               locationService.isCoordinateInChina(location.coordinate) {
+                // 在中国境内，使用真实位置
+                viewModel.updateUserLocation(location.coordinate, city: locationService.currentCity)
+            } else {
+                // 不在中国或无位置，使用默认城市
+                let city = locationService.currentCity ?? "北京"
+                viewModel.setDefaultCity(city)
+            }
         }
     }
     
