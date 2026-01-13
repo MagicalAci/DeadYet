@@ -24,6 +24,7 @@
 		A1000015 /* VoiceInputButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000015 /* VoiceInputButton.swift */; };
 		A1000016 /* LaunchScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000016 /* LaunchScreenView.swift */; };
 		A1000017 /* Colors.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000017 /* Colors.xcassets */; };
+		A1000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1000019 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +47,7 @@
 		B1000016 /* LaunchScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchScreenView.swift; sourceTree = "<group>"; };
 		B1000017 /* Colors.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Colors.xcassets; sourceTree = "<group>"; };
 		B1000018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B1000019 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -133,6 +135,7 @@
 		D0000008 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				B1000019 /* Assets.xcassets */,
 				B1000017 /* Colors.xcassets */,
 			);
 			path = Resources;
@@ -247,6 +250,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1000018 /* Assets.xcassets in Resources */,
 				A1000017 /* Colors.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

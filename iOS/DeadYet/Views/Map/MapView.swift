@@ -43,20 +43,111 @@ struct MapView: View {
     
     // MARK: - Map Content
     private var mapContent: some View {
-        Map(position: $mapCameraPosition) {
-            ForEach(cityStats) { city in
-                Annotation(city.city, coordinate: CLLocationCoordinate2D(latitude: city.latitude, longitude: city.longitude)) {
-                    CityMarker(city: city)
-                        .onTapGesture {
-                            selectedCity = city
-                            showComplaintSheet = true
-                            haptic(.light)
-                        }
+        ZStack(alignment: .topTrailing) {
+            Map(position: $mapCameraPosition) {
+                ForEach(cityStats) { city in
+                    Annotation(city.city, coordinate: CLLocationCoordinate2D(latitude: city.latitude, longitude: city.longitude)) {
+                        CityMarker(city: city)
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.3)) {
+                                    selectedCity = city
+                                    showComplaintSheet = true
+                                }
+                                haptic(.light)
+                            }
+                    }
                 }
             }
+            .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
+            .mapControls {
+                MapCompass()
+                MapScaleView()
+            }
+            .ignoresSafeArea(edges: .top)
+            
+            // 缩放控制按钮
+            VStack(spacing: 0) {
+                // 放大按钮
+                Button {
+                    zoomIn()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.primary)
+                        .frame(width: 44, height: 44)
+                }
+                
+                Divider()
+                    .frame(width: 30)
+                
+                // 缩小按钮
+                Button {
+                    zoomOut()
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.primary)
+                        .frame(width: 44, height: 44)
+                }
+                
+                Divider()
+                    .frame(width: 30)
+                
+                // 重置按钮
+                Button {
+                    resetMapPosition()
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.primary)
+                        .frame(width: 44, height: 44)
+                }
+            }
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .shadow(color: .black.opacity(0.15), radius: 5, x: 0, y: 2)
+            .padding(.top, 60)
+            .padding(.trailing, 12)
         }
-        .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .excludingAll))
-        .ignoresSafeArea(edges: .top)
+    }
+    
+    // MARK: - Map Controls
+    private func zoomIn() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            if case .region(let region) = mapCameraPosition {
+                let newSpan = MKCoordinateSpan(
+                    latitudeDelta: max(region.span.latitudeDelta / 2, 0.5),
+                    longitudeDelta: max(region.span.longitudeDelta / 2, 0.5)
+                )
+                mapCameraPosition = .region(MKCoordinateRegion(center: region.center, span: newSpan))
+            }
+        }
+        haptic(.light)
+    }
+    
+    private func zoomOut() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            if case .region(let region) = mapCameraPosition {
+                let newSpan = MKCoordinateSpan(
+                    latitudeDelta: min(region.span.latitudeDelta * 2, 60),
+                    longitudeDelta: min(region.span.longitudeDelta * 2, 60)
+                )
+                mapCameraPosition = .region(MKCoordinateRegion(center: region.center, span: newSpan))
+            }
+        }
+        haptic(.light)
+    }
+    
+    private func resetMapPosition() {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            mapCameraPosition = .region(
+                MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: 35.0, longitude: 105.0),
+                    span: MKCoordinateSpan(latitudeDelta: 30, longitudeDelta: 30)
+                )
+            )
+        }
+        haptic(.medium)
     }
     
     // MARK: - Complaint Wall
