@@ -460,17 +460,33 @@ private struct HotSpotsAPIResponse: Decodable {
         let tags: [String]?
         
         func toHotSpot() -> HotSpot {
-            HotSpot(
+            // 将 API 返回的 type 字符串转换为 SpotType 枚举
+            let spotType: HotSpot.SpotType
+            switch type.lowercased() {
+            case "techpark", "tech_park", "科技园区":
+                spotType = .techPark
+            case "cbd", "cbd商圈":
+                spotType = .cbd
+            case "industrial", "工业园区":
+                spotType = .industrial
+            case "office", "写字楼":
+                spotType = .office
+            default:
+                spotType = .other
+            }
+            
+            return HotSpot(
                 name: name,
-                type: type,
-                city: city,
-                district: district,
+                type: spotType,
                 latitude: latitude,
                 longitude: longitude,
+                city: city,
+                district: district,
                 totalWorkers: totalWorkers,
                 checkedIn: checkedIn,
                 stillWorking: stillWorking,
-                tags: tags ?? []
+                averageCheckOutTime: averageCheckOutTime,
+                tags: tags
             )
         }
     }
