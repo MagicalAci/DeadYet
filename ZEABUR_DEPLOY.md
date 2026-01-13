@@ -1,10 +1,23 @@
 # 🚀 Zeabur 部署指南
 
+## ⚡ 你的部署信息
+
+| 项目 | 值 |
+|------|-----|
+| GitHub 仓库 | https://github.com/MagicalAci/DeadYet |
+| Zeabur Token | `sk-kmmwgm5hff73ywldk3uhjxthhsbtd` |
+| 项目 ID | `6963f3eb4cd8a0ab9af1dcce` |
+| 服务 ID | `6965a81b12c8e2c31de8c1f5` |
+| 环境 ID | `6963f3eba7aaff0c1152bb59` |
+| 端口 | `8080` |
+
+---
+
 ## 前置准备
 
 1. 注册 [Zeabur](https://zeabur.com) 账号
-2. 创建 GitHub 仓库并推送代码
-3. 准备好你的 Zeabur API Token: `sk-kmmwgm5hff73ywldk3uhjxthhsbtd`
+2. 创建 GitHub 仓库并推送代码 ✅ 已完成
+3. 准备好你的 Zeabur API Token: `sk-kmmwgm5hff73ywldk3uhjxthhsbtd` ✅
 
 ## 部署步骤
 
@@ -92,9 +105,23 @@ curl https://your-api-domain/health
 private let baseURL = "https://your-api-domain"
 ```
 
-## 自动部署
+## 自动部署 (GitHub Actions)
 
-每次推送到 `main` 分支的 `Backend/` 目录，Zeabur 会自动重新部署。
+每次推送到 `main` 分支的 `Backend/` 目录，会自动触发部署。
+
+### 配置 GitHub Secrets
+
+1. 访问 https://github.com/MagicalAci/DeadYet/settings/secrets/actions
+2. 点击 "New repository secret"
+3. 添加以下 Secrets：
+
+| Secret 名称 | 值 |
+|-------------|-----|
+| `ZEABUR_API_KEY` | `sk-kmmwgm5hff73ywldk3uhjxthhsbtd` |
+| `ZEABUR_PROJECT_ID` | `6963f3eb4cd8a0ab9af1dcce` |
+| `ZEABUR_SERVICE_ID` | `6965a81b12c8e2c31de8c1f5` |
+
+配置完成后，每次 push 到 main 分支都会自动部署！
 
 ## 监控
 
