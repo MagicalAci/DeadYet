@@ -233,7 +233,8 @@ class APIMapDataProvider: MapDataProvider {
     init() {
         self.baseURL = ProcessInfo.processInfo.environment["API_URL"] ?? "https://deadyet.zeabur.app"
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForRequest = 5  // 5秒超时，更快 fallback 到 Mock
+        config.timeoutIntervalForResource = 10
         self.session = URLSession(configuration: config)
     }
     

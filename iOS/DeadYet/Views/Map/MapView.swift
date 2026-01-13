@@ -59,6 +59,13 @@ struct MapView: View {
                 handleFirstLocation(location)
             }
         }
+        // 监听定位错误（如不在中国）
+        .onChange(of: locationService.locationError) { _, error in
+            if error == .notInChina {
+                // 不在中国，使用北京作为默认城市
+                viewModel.setDefaultCity("北京")
+            }
+        }
         // 城市详情
         .sheet(item: $viewModel.selectedCity) { city in
             CityDetailSheet(city: city, dataProvider: viewModel.dataProvider)

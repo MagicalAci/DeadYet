@@ -124,6 +124,12 @@ class LocationService: NSObject, ObservableObject {
     
     /// 根据坐标查找最近的城市
     func findNearestCity(to coordinate: CLLocationCoordinate2D) -> (name: String, lat: Double, lon: Double)? {
+        // 如果不在中国境内，直接返回默认城市（北京）
+        if !isCoordinateInChina(coordinate) {
+            print("📍 不在中国境内，使用默认城市：北京")
+            return ("北京", 39.9042, 116.4074)
+        }
+        
         let userLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         
         var nearestCity: (name: String, lat: Double, lon: Double)?
