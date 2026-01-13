@@ -113,27 +113,25 @@ struct MapView: View {
     
     // MARK: - Map Controls
     private func zoomIn() {
+        guard case let .region(region) = mapCameraPosition else { return }
+        let newSpan = MKCoordinateSpan(
+            latitudeDelta: max(region.span.latitudeDelta / 2, 0.5),
+            longitudeDelta: max(region.span.longitudeDelta / 2, 0.5)
+        )
         withAnimation(.easeInOut(duration: 0.3)) {
-            if case .region(let region) = mapCameraPosition {
-                let newSpan = MKCoordinateSpan(
-                    latitudeDelta: max(region.span.latitudeDelta / 2, 0.5),
-                    longitudeDelta: max(region.span.longitudeDelta / 2, 0.5)
-                )
-                mapCameraPosition = .region(MKCoordinateRegion(center: region.center, span: newSpan))
-            }
+            mapCameraPosition = .region(MKCoordinateRegion(center: region.center, span: newSpan))
         }
         haptic(.light)
     }
     
     private func zoomOut() {
+        guard case let .region(region) = mapCameraPosition else { return }
+        let newSpan = MKCoordinateSpan(
+            latitudeDelta: min(region.span.latitudeDelta * 2, 60),
+            longitudeDelta: min(region.span.longitudeDelta * 2, 60)
+        )
         withAnimation(.easeInOut(duration: 0.3)) {
-            if case .region(let region) = mapCameraPosition {
-                let newSpan = MKCoordinateSpan(
-                    latitudeDelta: min(region.span.latitudeDelta * 2, 60),
-                    longitudeDelta: min(region.span.longitudeDelta * 2, 60)
-                )
-                mapCameraPosition = .region(MKCoordinateRegion(center: region.center, span: newSpan))
-            }
+            mapCameraPosition = .region(MKCoordinateRegion(center: region.center, span: newSpan))
         }
         haptic(.light)
     }
