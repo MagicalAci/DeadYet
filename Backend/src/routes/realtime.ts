@@ -5,13 +5,8 @@
  */
 
 import { Hono } from 'hono'
-import { 
-  CITY_CONFIGS, 
-  DISTRICT_CONFIGS,
-  HOTSPOT_CONFIGS,
-  calculateWorkingRate,
-  calculateCityStats 
-} from '../services/dataGenerationService'
+import { calculateWorkingRate, calculateCityStats } from '../services/dataGenerationService'
+import { CITIES, DISTRICTS, HOTSPOTS } from '../data/geoData'
 
 const realtime = new Hono()
 
@@ -31,7 +26,7 @@ realtime.get('/stats', (c) => {
   let totalStillWorking = 0
   let totalCheckedIn = 0
   
-  const cityStats = CITY_CONFIGS.map(city => {
+  const cityStats = CITIES.map(city => {
     const stats = calculateCityStats(city, now)
     totalWorkers += stats.totalWorkers
     totalStillWorking += stats.stillWorking
@@ -80,16 +75,16 @@ realtime.get('/city/:name', (c) => {
   const dayOfWeek = now.getDay()
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   
-  const cityConfig = CITY_CONFIGS.find(city => city.name === cityName)
+  const cityConfig = CITIES.find(city => city.name === cityName)
   if (!cityConfig) {
     return c.json({ success: false, error: '城市不存在' }, 404)
   }
   
   // 城市统计
-  const cityStats = calculateCityStats(cityConfig, now)
+  const cityStat = calculateCityStats(cityConfig, now)
   
   // 该城市的区域
-  const districts = DISTRICT_CONFIGS
+  const districts = DISTRICTS
     .filter(d => d.city === cityName)
     .map(district => {
       const districtOvertimeIndex = cityConfig.overtimeIndex * district.overtimeMultiplier
@@ -98,7 +93,7 @@ realtime.get('/city/:name', (c) => {
       // 区域人数为城市的5-15%（固定种子，保证一致性）
       const seed = district.name.charCodeAt(0) / 100
       const districtRatio = 0.05 + (seed % 0.1)
-      const districtWorkers = Math.round(cityStats.totalWorkers * districtRatio)
+      const districtWorkers = Math.round(cityStat.totalWorkers * districtRatio)
       
       return {
         district: district.name,
@@ -115,7 +110,7 @@ realtime.get('/city/:name', (c) => {
     })
   
   // 该城市的热门地点
-  const hotspots = HOTSPOT_CONFIGS
+  const hotspots = HOTSPOTS
     .filter(h => h.city === cityName)
     .map(spot => {
       const overtimeLevelMap = { extreme: 1.5, heavy: 1.25, normal: 1.0, light: 0.8 }
@@ -145,8 +140,8 @@ realtime.get('/city/:name', (c) => {
       tier: cityConfig.tier,
       latitude: cityConfig.lat,
       longitude: cityConfig.lon,
-      ...cityStats,
-      workingRate: Math.round(cityStats.workingRate * 100),
+      ...cityStat,
+      workingRate: Math.round(cityStat.workingRate * 100),
       industries: cityConfig.industries,
     },
     districts,
@@ -167,8 +162,8 @@ realtime.get('/hotspot/:city/:name', (c) => {
   const dayOfWeek = now.getDay()
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   
-  const cityConfig = CITY_CONFIGS.find(city => city.name === cityName)
-  const spotConfig = HOTSPOT_CONFIGS.find(h => h.city === cityName && h.name === spotName)
+  const cityConfig = CITIES.find(city => city.name === cityName)
+  const spotConfig = HOTSPOTS.find(h => h.city === cityName && h.name === spotName)
   
   if (!cityConfig || !spotConfig) {
     return c.json({ success: false, error: '地点不存在' }, 404)
@@ -222,7 +217,7 @@ realtime.get('/ranking', (c) => {
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
   
   // 城市排行（按在班率排序）
-  const cityRanking = CITY_CONFIGS.map(city => {
+  const cityRanking = CITIES.map(city => {
     const stats = calculateCityStats(city, now)
     return {
       city: city.name,
@@ -233,8 +228,8 @@ realtime.get('/ranking', (c) => {
   }).sort((a, b) => b.workingRate - a.workingRate)
   
   // 热门地点排行
-  const hotspotRanking = HOTSPOT_CONFIGS.map(spot => {
-    const cityConfig = CITY_CONFIGS.find(c => c.name === spot.city)!
+  const hotspotRanking = HOTSPOTS.map(spot => {
+    const cityConfig = CITIES.find(c => c.name === spot.city)!
     const overtimeLevelMap = { extreme: 1.5, heavy: 1.25, normal: 1.0, light: 0.8 }
     const spotOvertimeIndex = cityConfig.overtimeIndex * overtimeLevelMap[spot.overtimeLevel]
     const workingRate = calculateWorkingRate(hour, minute, spotOvertimeIndex, isWeekend)
@@ -280,7 +275,7 @@ realtime.get('/time-simulation', (c) => {
   
   if (cityParam) {
     // 单个城市模拟
-    const cityConfig = CITY_CONFIGS.find(c => c.name === cityParam)
+    const cityConfig = CITIES.find(c => c.name === cityParam)
     if (!cityConfig) {
       return c.json({ success: false, error: '城市不存在' }, 404)
     }
@@ -301,7 +296,7 @@ realtime.get('/time-simulation', (c) => {
   }
   
   // 全部城市模拟
-  const results = CITY_CONFIGS.map(city => {
+  const results = CITIES.map(city => {
     const workingRate = calculateWorkingRate(hour, minute, city.overtimeIndex, isWeekend)
     return {
       city: city.name,

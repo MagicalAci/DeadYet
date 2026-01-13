@@ -7,23 +7,51 @@ import { pgTable, uuid, varchar, text, integer, boolean, timestamp, doublePrecis
 
 // ==================== 用户相关 ====================
 
-// 用户表
+// 用户表（支持手机号注册+可选资料）
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  nickname: varchar('nickname', { length: 50 }),
-  avatarEmoji: varchar('avatar_emoji', { length: 10 }).default('🐂'),
+  
+  // === 登录凭证 ===
+  phone: varchar('phone', { length: 20 }).unique(),           // 手机号（主要登录方式）
+  email: varchar('email', { length: 255 }).unique(),          // 邮箱（备选）
+  
+  // === 基本资料（可选，有默认值）===
+  nickname: varchar('nickname', { length: 50 }),              // 昵称
+  avatarEmoji: varchar('avatar_emoji', { length: 10 }).default('🐂'),  // 头像emoji
+  workYears: integer('work_years').default(1),                // 工作年限（默认1年）
+  
+  // === 可选详细资料 ===
+  industry: varchar('industry', { length: 30 }),              // 行业：互联网/金融/制造/教育/医疗/其他
+  companySize: varchar('company_size', { length: 20 }),       // 公司规模：创业/中小/大厂/外企/国企
+  jobTitle: varchar('job_title', { length: 50 }),             // 职位
+  
+  // === 位置信息 ===
+  city: varchar('city', { length: 50 }),
+  district: varchar('district', { length: 50 }),
+  lastLatitude: doublePrecision('last_latitude'),             // 最后位置
+  lastLongitude: doublePrecision('last_longitude'),
+  locationPrivacy: varchar('location_privacy', { length: 20 }).default('district'),  // exact/district/city/hidden
+  
+  // === 统计数据 ===
   survivalDays: integer('survival_days').default(0),
   totalCheckIns: integer('total_check_ins').default(0),
   currentStreak: integer('current_streak').default(0),
   longestStreak: integer('longest_streak').default(0),
-  city: varchar('city', { length: 50 }),
-  district: varchar('district', { length: 50 }),
+  
+  // === 元数据 ===
+  isVirtual: boolean('is_virtual').default(false),            // 是否虚拟用户
   createdAt: timestamp('created_at').defaultNow(),
   lastCheckIn: timestamp('last_check_in'),
+  lastActiveAt: timestamp('last_active_at'),                  // 最后活跃时间
+  
+  // === 推送 ===
   pushEnabled: boolean('push_enabled').default(true),
   deviceToken: varchar('device_token', { length: 255 }),
-})
+}, (table) => ({
+  phoneIdx: index('users_phone_idx').on(table.phone),
+  cityIdx: index('users_city_idx').on(table.city),
+  locationIdx: index('users_location_idx').on(table.lastLatitude, table.lastLongitude),
+}))
 
 // ==================== 签到相关 ====================
 

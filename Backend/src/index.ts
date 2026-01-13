@@ -21,6 +21,7 @@ import uploadRoutes from './routes/upload.js'
 import contentRoutes from './routes/content.js'
 import realtimeRoutes from './routes/realtime.js'
 import adminRoutes from './routes/admin.js'
+import userRoutes from './routes/user.js'
 
 const app = new Hono()
 
@@ -63,6 +64,7 @@ app.get('/health', (c) => {
 
 // API路由
 app.route('/api/auth', authRoutes)
+app.route('/api/user', userRoutes)           // 用户系统（手机号登录）
 app.route('/api/checkin', checkInRoutes)
 app.route('/api/map', mapRoutes)
 app.route('/api/complaints', complaintsRoutes)

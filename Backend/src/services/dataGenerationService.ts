@@ -11,6 +11,14 @@
 import { db } from '../db'
 import { users, complaints, comments, likes, checkIns, cityStats, districtStats, hotSpots } from '../db/schema'
 import { sql } from 'drizzle-orm'
+import { 
+  CITIES, DISTRICTS, HOTSPOTS, 
+  getRandomNickname, getRandomEmoji,
+  CityConfig, DistrictConfig, HotSpotConfig
+} from '../data/geoData'
+
+// 重新导出地理数据（保持兼容）
+export { CITIES as CITY_CONFIGS, DISTRICTS as DISTRICT_CONFIGS, HOTSPOTS as HOTSPOT_CONFIGS } from '../data/geoData'
 
 // ==================== 城市配置（真实数据） ====================
 
